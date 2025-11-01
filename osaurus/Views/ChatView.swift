@@ -10,6 +10,12 @@ import Carbon.HIToolbox
 import Combine
 import SwiftUI
 
+// MARK: - Display Mode
+enum ChatDisplayMode {
+  case floatingPanel  // Quick access panel (Cmd+Shift+;)
+  case mainWindow     // Persistent main window (menu bar button)
+}
+
 @MainActor
 final class ChatSession: ObservableObject {
   @Published var turns: [(role: MessageRole, content: String)] = []
@@ -20,7 +26,10 @@ final class ChatSession: ObservableObject {
   @Published var scrollTick: Int = 0
   private var currentTask: Task<Void, Never>?
 
-  init() {
+  init(initialConversation: [(role: MessageRole, content: String)] = []) {
+    // Set initial conversation if provided
+    self.turns = initialConversation
+    
     // Build options list (foundation first if available)
     var opts: [String] = []
     if FoundationModelService.isDefaultModelAvailable() {
@@ -28,6 +37,34 @@ final class ChatSession: ObservableObject {
     }
     let mlx = MLXService.getAvailableModels()
     opts.append(contentsOf: mlx)
+
+    // Add OpenCode models if available (fetch dynamically)
+    let opencode = OpenCodeProxyService()
+    print("[ChatSession] Checking OpenCode availability...")
+    if opencode.isAvailable() {
+      print("[ChatSession] OpenCode is available, fetching models...")
+      Task {
+        do {
+          let models = try await opencode.getAvailableModels()
+          print("[ChatSession] Fetched \(models.count) OpenCode models")
+          await MainActor.run {
+            // Add provider:model format to options
+            for (provider, model, _) in models {
+              let modelName = "\(provider):\(model)"
+              if !self.modelOptions.contains(modelName) {
+                self.modelOptions.append(modelName)
+                print("[ChatSession] Added model: \(modelName)")
+              }
+            }
+          }
+        } catch {
+          print("[ChatSession] Failed to fetch OpenCode models: \(error)")
+        }
+      }
+    } else {
+      print("[ChatSession] OpenCode is not available")
+    }
+
     modelOptions = opts
     // Set default selectedModel to first available
     selectedModel = opts.first
@@ -72,7 +109,11 @@ final class ChatSession: ObservableObject {
         ServerController.signalGenerationEnd()
       }
 
-      let services: [ModelService] = [FoundationModelService(), MLXService.shared]
+      let services: [ModelService] = [
+        FoundationModelService(),
+        MLXService.shared,
+        OpenCodeProxyService()
+      ]
       let installed = MLXService.getAvailableModels()
       switch ModelServiceRouter.resolve(
         requestedModel: selectedModel,
@@ -107,24 +148,198 @@ final class ChatSession: ObservableObject {
 struct ChatView: View {
   @EnvironmentObject var server: ServerController
   @StateObject private var themeManager = ThemeManager.shared
+  @StateObject private var conversationStore = ConversationStore.shared
 
   private var theme: ThemeProtocol {
     themeManager.currentTheme
   }
-  @StateObject private var session = ChatSession()
+  
+  let displayMode: ChatDisplayMode
+  let initialConversation: [(role: MessageRole, content: String)]
+  
+  @StateObject private var session: ChatSession
   // Using AppKit-backed text view to handle Enter vs Shift+Enter
   @State private var focusTrigger: Int = 0
   @State private var isPinnedToBottom: Bool = true
   @State private var inputIsFocused: Bool = false
   @State private var hostWindow: NSWindow?
+  @State private var showSidebar: Bool = true
+  @State private var currentConversationId: UUID?
+  
+  init(
+    displayMode: ChatDisplayMode,
+    initialConversation: [(role: MessageRole, content: String)]
+  ) {
+    self.displayMode = displayMode
+    self.initialConversation = initialConversation
+    self._session = StateObject(wrappedValue: ChatSession(initialConversation: initialConversation))
+  }
 
   var body: some View {
+    mainContentView
+      .modifier(ChatViewModifiers(
+        displayMode: displayMode,
+        hostWindow: $hostWindow,
+        focusTrigger: $focusTrigger,
+        isPinnedToBottom: $isPinnedToBottom,
+        session: session,
+        inputIsFocused: inputIsFocused,
+        onResizeWindow: resizeWindowForContent,
+        onSaveConversation: saveCurrentConversation
+      ))
+  }
+
+  // MARK: - Main Content View
+  
+  private var mainContentView: some View {
+    Group {
+      if displayMode == .mainWindow {
+        mainWindowWithSidebar
+      } else {
+        floatingPanelView
+      }
+    }
+  }
+  
+  private var mainWindowWithSidebar: some View {
+    HSplitView {
+      if showSidebar {
+        sidebarView
+      }
+      chatContent
+    }
+    .frame(
+      minWidth: showSidebar ? 960 : 700,
+      idealWidth: showSidebar ? 1160 : 900,
+      maxWidth: .infinity,
+      minHeight: session.turns.isEmpty ? 200 : 525,
+      idealHeight: session.turns.isEmpty ? 250 : 700,
+      maxHeight: .infinity
+    )
+  }
+  
+  private var floatingPanelView: some View {
+    Group {
+      if session.turns.isEmpty {
+        // Beautiful minimal entry UI
+        minimalEntryView
+      } else {
+        // Full chat content after first message
+        chatContent
+      }
+    }
+    .frame(
+      minWidth: session.turns.isEmpty ? 500 : 700,
+      idealWidth: session.turns.isEmpty ? 600 : 900,
+      maxWidth: .infinity,
+      minHeight: session.turns.isEmpty ? 80 : 525,
+      idealHeight: session.turns.isEmpty ? 80 : 700,
+      maxHeight: .infinity
+    )
+  }
+  
+  private var sidebarView: some View {
+    ConversationSidebarView(
+      store: conversationStore,
+      onSelectConversation: { id in
+        loadConversation(id)
+      },
+      onNewChat: {
+        createNewChat()
+      }
+    )
+    .frame(minWidth: 260, maxWidth: 260)
+  }
+  
+  // MARK: - Minimal Entry View (Floating Panel Empty State)
+  
+  private var minimalEntryView: some View {
+    ZStack {
+      // Glass background
+      GlassSurface(cornerRadius: 40)
+        .allowsHitTesting(false)
+      
+      HStack(spacing: 12) {
+        // Plus icon
+        Image(systemName: "plus")
+          .font(.system(size: 16, weight: .medium))
+          .foregroundColor(.white.opacity(0.7))
+        
+        // Input field
+        TextField("Your question here", text: $session.input, onCommit: {
+          handleMinimalEntrySend()
+        })
+        .textFieldStyle(.plain)
+        .font(.system(size: 16, weight: .regular))
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        
+        // Send button (circular white button with arrow)
+        Button(action: {
+          handleMinimalEntrySend()
+        }) {
+          ZStack {
+            Circle()
+              .fill(Color.white)
+              .frame(width: 44, height: 44)
+              .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+            
+            Image(systemName: "arrow.right")
+              .font(.system(size: 18, weight: .semibold))
+              .foregroundColor(.black)
+          }
+        }
+        .buttonStyle(.plain)
+        .help("Send message")
+        .disabled(session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+      .padding(.horizontal, 24)
+      .padding(.vertical, 18)
+    }
+    .frame(height: 80)
+    .padding(.horizontal, 40)
+  }
+  
+  private func handleMinimalEntrySend() {
+    guard !session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    
+    // Send the message and wait for response to complete before expanding
+    session.sendCurrent()
+    
+    // Wait for the response to complete, then expand to main window
+    if displayMode == .floatingPanel {
+      // Use Task to monitor the streaming state
+      Task { @MainActor in
+        // Wait for streaming to finish
+        while session.isStreaming {
+          try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        }
+        
+        // Small delay to ensure UI updates
+        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
+        
+        // Now expand with the complete conversation
+        AppDelegate.shared?.expandPanelToWindow(conversation: session.turns)
+      }
+    }
+  }
+  
+  // MARK: - Chat Content
+  
+  private var chatContent: some View {
     GeometryReader { proxy in
       let containerWidth = proxy.size.width
       ZStack(alignment: .bottomTrailing) {
-        // Unified glass surface background
-        GlassSurface(cornerRadius: 28)
-          .allowsHitTesting(false)
+        // Conditional background based on display mode
+        if displayMode == .floatingPanel {
+          // Glass effect for floating panel
+          GlassSurface(cornerRadius: 28)
+            .allowsHitTesting(false)
+        } else {
+          // Solid background for main window (desktop app style)
+          Color.clear
+            .allowsHitTesting(false)
+        }
 
         VStack(spacing: 10) {
           header(containerWidth)
@@ -133,19 +348,14 @@ struct ChatView: View {
               conversation(containerWidth)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             } else {
-              // Add minimal spacer when empty to keep window compact
+              // Add flexible spacer when empty to center the input
               Spacer()
-                .frame(height: 0)
             }
-            inputBar(containerWidth)
-            bottomControls(containerWidth)
+            
+            // Input bar at the bottom with integrated send button
+            inputBarWithButton(containerWidth)
           } else {
             emptyState
-          }
-
-          // Add flexible spacer only when there are messages
-          if !session.turns.isEmpty && hasAnyModel {
-            Spacer(minLength: 0)
           }
         }
         .animation(.easeInOut(duration: 0.25), value: session.turns.isEmpty)
@@ -158,33 +368,8 @@ struct ChatView: View {
         )
       }
     }
-    .frame(
-      minWidth: 700,
-      idealWidth: 900,
-      maxWidth: .infinity,
-      minHeight: session.turns.isEmpty ? 200 : 525,
-      idealHeight: session.turns.isEmpty ? 250 : 700,
-      maxHeight: .infinity
-    )
-    .animation(.easeInOut(duration: 0.3), value: session.turns.isEmpty)
-    .background(WindowAccessor(window: $hostWindow))
-    .overlay(alignment: .topTrailing) {
-      HoveringIcon(systemName: "xmark", help: "Close") {
-        AppDelegate.shared?.closeChatOverlay()
-      }
-      .padding(20)
-    }
-    .onExitCommand { AppDelegate.shared?.closeChatOverlay() }
-    .onReceive(NotificationCenter.default.publisher(for: .chatOverlayActivated)) { _ in
-      focusTrigger &+= 1
-      isPinnedToBottom = true
-    }
-    .onChange(of: session.turns.isEmpty) { oldValue, newValue in
-      // Resize window when chat is cleared or gets content
-      resizeWindowForContent(isEmpty: newValue)
-    }
   }
-
+  
   private func resizeWindowForContent(isEmpty: Bool) {
     guard let window = hostWindow else { return }
 
@@ -211,21 +396,74 @@ struct ChatView: View {
   }
 
   private func header(_ width: CGFloat) -> some View {
-    HStack(spacing: 12) {
-      Text("Chat with \(displayModelName(session.selectedModel))")
-        .font(Typography.title(width))
-        .foregroundColor(theme.primaryText)
-        .fontWeight(.medium)
-        .padding(.vertical, 4)
-      if !session.turns.isEmpty {
-        Button(action: { session.reset() }) {
-          Image(systemName: "trash")
-            .foregroundColor(theme.secondaryText)
+    VStack(spacing: 12) {
+      // Top row: sidebar toggle, title, and buttons
+      HStack(spacing: 12) {
+        // Sidebar toggle button (only for main window)
+        if displayMode == .mainWindow {
+          Button(action: { 
+            withAnimation {
+              showSidebar.toggle()
+            }
+          }) {
+            Image(systemName: "sidebar.left")
+              .foregroundColor(theme.secondaryText)
+          }
+          .buttonStyle(.plain)
+          .help(showSidebar ? "Hide Sidebar" : "Show Sidebar")
         }
-        .buttonStyle(.plain)
-        .help("Reset chat")
+        
+        Spacer()
+        
+        if !session.turns.isEmpty {
+          Button(action: { 
+            if displayMode == .mainWindow {
+              // In main window, ask to save before resetting
+              createNewChat()
+            } else {
+              session.reset()
+            }
+          }) {
+            Image(systemName: displayMode == .mainWindow ? "plus" : "trash")
+              .foregroundColor(theme.secondaryText)
+          }
+          .buttonStyle(.plain)
+          .help(displayMode == .mainWindow ? "New Chat" : "Reset chat")
+        }
+        
+        // Show "Expand" button only in floating panel mode when conversation exists
+        if displayMode == .floatingPanel && !session.turns.isEmpty {
+          Button(action: { 
+            // Pass conversation data to AppDelegate before expanding
+            AppDelegate.shared?.expandPanelToWindow(conversation: session.turns)
+          }) {
+            HStack(spacing: 4) {
+              Image(systemName: "arrow.up.left.and.arrow.down.right")
+              Text("Expand")
+            }
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(Color.accentColor)
+          }
+          .buttonStyle(.plain)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .background(
+            Capsule()
+              .fill(Color.accentColor.opacity(0.1))
+              .overlay(
+                Capsule()
+                  .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
+              )
+          )
+          .help("Expand to main window")
+        }
       }
-      Spacer()
+      
+      // Second row: Model selector
+      HStack(spacing: 12) {
+        modelPicker
+        Spacer()
+      }
     }
   }
 
@@ -234,6 +472,114 @@ struct ChatView: View {
     if raw.lowercased() == "foundation" { return "Foundation" }
     if let last = raw.split(separator: "/").last { return String(last) }
     return raw
+  }
+  
+  // MARK: - Model Picker
+  
+  private var modelPicker: some View {
+    HStack(spacing: 10) {
+      // Model icon - using a gradient circle with SF Symbol (Apple liquid glass style)
+      ZStack {
+        Circle()
+          .fill(
+            LinearGradient(
+              colors: [Color.blue.opacity(0.7), Color.purple.opacity(0.7)],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            )
+          )
+          .frame(width: 28, height: 28)
+          .overlay(
+            Circle()
+              .fill(
+                RadialGradient(
+                  colors: [Color.white.opacity(0.3), Color.clear],
+                  center: .topLeading,
+                  startRadius: 0,
+                  endRadius: 20
+                )
+              )
+          )
+        
+        Image(systemName: "sparkles")
+          .font(.system(size: 13, weight: .semibold))
+          .foregroundColor(.white)
+      }
+      .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
+      
+      // Model name and picker
+      if session.modelOptions.count > 1 {
+        Menu {
+          ForEach(session.modelOptions, id: \.self) { name in
+            Button(action: {
+              session.selectedModel = name
+            }) {
+              HStack {
+                Text(displayModelName(name))
+                  .font(.system(size: 13))
+                Spacer()
+                if session.selectedModel == name {
+                  Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.accentColor)
+                }
+              }
+            }
+          }
+        } label: {
+          Text(session.selectedModel.map(displayModelName) ?? "Select Model")
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(theme.primaryText)
+        }
+        .menuStyle(.borderlessButton)
+        .buttonStyle(.plain)
+        .help("Select model")
+      } else if let selected = session.selectedModel {
+        HStack(spacing: 6) {
+          Text(displayModelName(selected))
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(theme.primaryText)
+        }
+      }
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 8)
+    .background(
+      ZStack {
+        // Liquid glass effect base
+        RoundedRectangle(cornerRadius: 12)
+          .fill(.ultraThinMaterial)
+        
+        // Subtle gradient overlay for depth
+        RoundedRectangle(cornerRadius: 12)
+          .fill(
+            LinearGradient(
+              colors: [
+                Color.white.opacity(0.08),
+                Color.white.opacity(0.02)
+              ],
+              startPoint: .top,
+              endPoint: .bottom
+            )
+          )
+        
+        // Border with gradient
+        RoundedRectangle(cornerRadius: 12)
+          .strokeBorder(
+            LinearGradient(
+              colors: [
+                Color.white.opacity(0.2),
+                Color.white.opacity(0.05)
+              ],
+              startPoint: .topLeading,
+              endPoint: .bottomTrailing
+            ),
+            lineWidth: 0.5
+          )
+      }
+    )
+    .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
+    .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
   }
 
   private func conversation(_ width: CGFloat) -> some View {
@@ -364,57 +710,63 @@ struct ChatView: View {
     NSPasteboard.general.setString(text, forType: .string)
   }
 
-  private func inputBar(_ width: CGFloat) -> some View {
-    ZStack(alignment: .topLeading) {
-      GlassInputFieldBridge(
-        text: $session.input,
-        isFocused: inputIsFocused,
-        onCommit: { session.sendCurrent() },
-        onFocusChange: { focused in inputIsFocused = focused }
-      )
-      .frame(minHeight: 48, maxHeight: 120)
-      .background(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .fill(
-            theme.glassOpacityTertiary == 0.05
-              ? theme.secondaryBackground.opacity(0.4) : theme.primaryBackground.opacity(0.4)
-          )
-          .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-              .fill(.ultraThinMaterial)
-          )
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-          .strokeBorder(
-            inputIsFocused
-              ? LinearGradient(
-                colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              )
-              : LinearGradient(
-                colors: [theme.glassEdgeLight, theme.glassEdgeLight.opacity(0.3)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-              ),
-            lineWidth: inputIsFocused ? 1.5 : 0.5
-          )
-      )
-      .shadow(
-        color: inputIsFocused ? Color.accentColor.opacity(0.2) : Color.clear,
-        radius: inputIsFocused ? 20 : 0
-      )
-      .animation(.easeInOut(duration: theme.animationDurationMedium), value: inputIsFocused)
+  private func inputBarWithButton(_ width: CGFloat) -> some View {
+    HStack(alignment: .bottom, spacing: 12) {
+      // Input field
+      ZStack(alignment: .topLeading) {
+        GlassInputFieldBridge(
+          text: $session.input,
+          isFocused: inputIsFocused,
+          onCommit: { session.sendCurrent() },
+          onFocusChange: { focused in inputIsFocused = focused }
+        )
+        .frame(minHeight: 48, maxHeight: 120)
+        .background(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(
+              theme.glassOpacityTertiary == 0.05
+                ? theme.secondaryBackground.opacity(0.4) : theme.primaryBackground.opacity(0.4)
+            )
+            .background(
+              RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+            )
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(
+              inputIsFocused
+                ? LinearGradient(
+                  colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.3)],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                )
+                : LinearGradient(
+                  colors: [theme.glassEdgeLight, theme.glassEdgeLight.opacity(0.3)],
+                  startPoint: .topLeading,
+                  endPoint: .bottomTrailing
+                ),
+              lineWidth: inputIsFocused ? 1.5 : 0.5
+            )
+        )
+        .shadow(
+          color: inputIsFocused ? Color.accentColor.opacity(0.2) : Color.clear,
+          radius: inputIsFocused ? 20 : 0
+        )
+        .animation(.easeInOut(duration: theme.animationDurationMedium), value: inputIsFocused)
 
-      if session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-        Text("Type your message…")
-          .font(.system(size: 15))
-          .foregroundColor(theme.tertiaryText)
-          .padding(.horizontal, 8)
-          .padding(.vertical, 8)
-          .allowsHitTesting(false)
+        if session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          Text("Type your message…")
+            .font(.system(size: 15))
+            .foregroundColor(theme.tertiaryText)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
+            .allowsHitTesting(false)
+        }
       }
+      
+      // Send/Stop button
+      primaryActionButton
     }
   }
 
@@ -511,39 +863,7 @@ struct ChatView: View {
     .keyboardShortcut(.return, modifiers: [.command])
   }
 
-  private func bottomControls(_ width: CGFloat) -> some View {
-    HStack(spacing: 8) {
-      if session.modelOptions.count > 1 {
-        Picker("Model", selection: $session.selectedModel) {
-          ForEach(session.modelOptions, id: \.self) { name in
-            Text(name).tag(Optional(name))
-          }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .frame(width: 180)
-        .help("Select model")
-      } else if let selected = session.selectedModel {
-        Text(selected)
-          .font(.system(size: 12, weight: .medium))
-          .foregroundColor(theme.secondaryText)
-          .padding(.vertical, 6)
-          .padding(.horizontal, 10)
-          .background(
-            RoundedRectangle(cornerRadius: 6)
-              .fill(theme.secondaryBackground.opacity(0.6))
-              .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                  .stroke(theme.glassEdgeLight.opacity(0.3), lineWidth: 1)
-              )
-          )
-      }
 
-      Spacer()
-
-      primaryActionButton
-    }
-  }
 
   private var emptyState: some View {
     VStack(spacing: 12) {
@@ -569,6 +889,140 @@ struct ChatView: View {
 
   private var hasAnyModel: Bool {
     FoundationModelService.isDefaultModelAvailable() || !MLXService.getAvailableModels().isEmpty
+  }
+  
+  // MARK: - Conversation Management
+  
+  /// Load a conversation from the store
+  private func loadConversation(_ id: UUID) {
+    guard let conversation = conversationStore.conversations.first(where: { $0.id == id }) else { return }
+    
+    // Save current conversation before switching (if in main window and has content)
+    if displayMode == .mainWindow && !session.turns.isEmpty {
+      saveCurrentConversation()
+    }
+    
+    // Load the selected conversation
+    session.turns = conversation.messages
+    currentConversationId = id
+    conversationStore.setCurrentConversation(id)
+    
+    // Reset scroll
+    isPinnedToBottom = true
+  }
+  
+  /// Create a new chat
+  private func createNewChat() {
+    // Save current conversation if it has content
+    if displayMode == .mainWindow && !session.turns.isEmpty {
+      saveCurrentConversation()
+    }
+    
+    // Create new conversation
+    let newId = conversationStore.createConversation()
+    currentConversationId = newId
+    
+    // Reset session
+    session.reset()
+    isPinnedToBottom = true
+  }
+  
+  /// Save the current conversation to the store
+  private func saveCurrentConversation() {
+    guard displayMode == .mainWindow else { return }
+    guard !session.turns.isEmpty else { return }
+    
+    if let id = currentConversationId {
+      // Update existing conversation
+      conversationStore.updateConversation(id, messages: session.turns)
+    } else {
+      // Create new conversation
+      let newId = conversationStore.createConversation(messages: session.turns)
+      currentConversationId = newId
+    }
+  }
+}
+
+// MARK: - Chat View Modifiers
+
+struct ChatViewModifiers: ViewModifier {
+  let displayMode: ChatDisplayMode
+  @Binding var hostWindow: NSWindow?
+  @Binding var focusTrigger: Int
+  @Binding var isPinnedToBottom: Bool
+  @ObservedObject var session: ChatSession
+  let inputIsFocused: Bool
+  let onResizeWindow: (Bool) -> Void
+  let onSaveConversation: () -> Void
+  
+  func body(content: Content) -> some View {
+    content
+      .animation(.easeInOut(duration: 0.3), value: session.turns.isEmpty)
+      .background(WindowAccessor(window: $hostWindow))
+      .overlay(alignment: .topTrailing) {
+        closeButton
+      }
+      .onExitCommand { 
+        AppDelegate.shared?.closeChatOverlay() 
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .chatOverlayActivated)) { _ in
+        focusTrigger &+= 1
+        isPinnedToBottom = true
+      }
+      .onChange(of: session.turns.isEmpty) { oldValue, newValue in
+        // Only resize for floating panel, not main window
+        if displayMode == .floatingPanel {
+           onResizeWindow(newValue)
+        }
+      }
+      .onChange(of: session.input) { oldValue, newValue in
+        handleInputChange()
+      }
+      .onChange(of: session.turns.count) { oldValue, newValue in
+        handleTurnsCountChange(oldCount: oldValue, newCount: newValue)
+      }
+      .onChange(of: inputIsFocused) { oldValue, newValue in
+        handleFocusChange(newValue)
+      }
+      .onChange(of: session.isStreaming) { oldValue, newValue in
+        handleStreamingChange(oldValue: oldValue, newValue: newValue)
+      }
+  }
+  
+  private var closeButton: some View {
+    HoveringIcon(systemName: "xmark", help: "Close") {
+      AppDelegate.shared?.closeChatOverlay()
+    }
+    .padding(20)
+  }
+  
+  private func handleInputChange() {
+    if displayMode == .floatingPanel {
+      AppDelegate.shared?.resetPanelInactivityTimer()
+    }
+  }
+  
+  private func handleTurnsCountChange(oldCount: Int, newCount: Int) {
+    if displayMode == .floatingPanel {
+      AppDelegate.shared?.resetPanelInactivityTimer()
+    }
+    
+    // Auto-save when messages change in main window (but not during streaming)
+    if displayMode == .mainWindow && newCount > 0 && !session.isStreaming {
+      onSaveConversation()
+    }
+  }
+  
+  private func handleFocusChange(_ focused: Bool) {
+    if displayMode == .floatingPanel && focused {
+      AppDelegate.shared?.resetPanelInactivityTimer()
+    }
+  }
+  
+  private func handleStreamingChange(oldValue: Bool, newValue: Bool) {
+    if displayMode == .mainWindow && !newValue && oldValue && !session.turns.isEmpty {
+      onSaveConversation()
+    }
   }
 }
 
