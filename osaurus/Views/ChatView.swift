@@ -40,20 +40,16 @@ final class ChatSession: ObservableObject {
 
     // Add OpenCode models if available (fetch dynamically)
     let opencode = OpenCodeProxyService()
-    print("[ChatSession] Checking OpenCode availability...")
     if opencode.isAvailable() {
-      print("[ChatSession] OpenCode is available, fetching models...")
       Task {
         do {
           let models = try await opencode.getAvailableModels()
-          print("[ChatSession] Fetched \(models.count) OpenCode models")
           await MainActor.run {
             // Add provider:model format to options
             for (provider, model, _) in models {
               let modelName = "\(provider):\(model)"
               if !self.modelOptions.contains(modelName) {
                 self.modelOptions.append(modelName)
-                print("[ChatSession] Added model: \(modelName)")
               }
             }
           }
@@ -61,8 +57,6 @@ final class ChatSession: ObservableObject {
           print("[ChatSession] Failed to fetch OpenCode models: \(error)")
         }
       }
-    } else {
-      print("[ChatSession] OpenCode is not available")
     }
 
     modelOptions = opts
@@ -155,7 +149,6 @@ struct ChatView: View {
   }
   
   let displayMode: ChatDisplayMode
-  let initialConversation: [(role: MessageRole, content: String)]
   
   @StateObject private var session: ChatSession
   // Using AppKit-backed text view to handle Enter vs Shift+Enter
@@ -165,14 +158,32 @@ struct ChatView: View {
   @State private var hostWindow: NSWindow?
   @State private var showSidebar: Bool = true
   @State private var currentConversationId: UUID?
+  @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
+  @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
   
   init(
     displayMode: ChatDisplayMode,
-    initialConversation: [(role: MessageRole, content: String)]
+    initialConversationId: UUID? = nil
   ) {
     self.displayMode = displayMode
-    self.initialConversation = initialConversation
-    self._session = StateObject(wrappedValue: ChatSession(initialConversation: initialConversation))
+    
+    // Load conversation from store if ID is provided, otherwise start empty
+    let initialMessages: [(role: MessageRole, content: String)]
+    if let conversationId = initialConversationId,
+       let conversation = ConversationStore.shared.conversations.first(where: { $0.id == conversationId }) {
+      initialMessages = conversation.messages
+      self._currentConversationId = State(initialValue: conversationId)
+      print("🔵 [MainWindow Init] Loaded conversation ID: \(conversationId) with \(initialMessages.count) messages")
+      for (index, msg) in initialMessages.enumerated() {
+        print("   Message \(index + 1): \(msg.role) - \(msg.content.prefix(50))...")
+      }
+    } else {
+      initialMessages = []
+      self._currentConversationId = State(initialValue: nil)
+      print("🔵 [MainWindow Init] Starting with empty conversation")
+    }
+    
+    self._session = StateObject(wrappedValue: ChatSession(initialConversation: initialMessages))
   }
 
   var body: some View {
@@ -302,6 +313,16 @@ struct ChatView: View {
   
   private func handleMinimalEntrySend() {
     guard !session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    guard !isSendingMessage else {
+      print("⚠️ [FloatingPanel] Already sending message, ignoring duplicate call")
+      return
+    }
+    guard !isExpandingToMainWindow else { 
+      print("⚠️ [FloatingPanel] Already expanding, ignoring send")
+      return 
+    }
+    
+    isSendingMessage = true
     
     // Send the message and wait for response to complete before expanding
     session.sendCurrent()
@@ -318,8 +339,31 @@ struct ChatView: View {
         // Small delay to ensure UI updates
         try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
         
-        // Now expand with the complete conversation
-        AppDelegate.shared?.expandPanelToWindow(conversation: session.turns)
+        // Prevent double-expand
+        guard !isExpandingToMainWindow else {
+          print("⚠️ [FloatingPanel] Already expanding, skipping")
+          return
+        }
+        isExpandingToMainWindow = true
+        
+        // Debug: Print what messages we're saving
+        print("🟢 [FloatingPanel] Saving \(session.turns.count) messages:")
+        for (index, turn) in session.turns.enumerated() {
+          print("   Message \(index + 1): \(turn.role) - \(turn.content.prefix(50))...")
+        }
+        
+        // Save the conversation and get its ID before expanding
+        let conversationId = conversationStore.createConversation(messages: session.turns)
+        print("🟢 [FloatingPanel] Created conversation with ID: \(conversationId)")
+        print("🟢 [FloatingPanel] Total conversations in store: \(conversationStore.conversations.count)")
+        
+        // Now expand with the conversation ID (not messages)
+        AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
+        
+        // Reset flags after a delay
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        isSendingMessage = false
+        isExpandingToMainWindow = false
       }
     }
   }
@@ -434,8 +478,17 @@ struct ChatView: View {
         // Show "Expand" button only in floating panel mode when conversation exists
         if displayMode == .floatingPanel && !session.turns.isEmpty {
           Button(action: { 
-            // Pass conversation data to AppDelegate before expanding
-            AppDelegate.shared?.expandPanelToWindow(conversation: session.turns)
+            guard !isExpandingToMainWindow else {
+              print("⚠️ [FloatingPanel] Already expanding, ignoring button click")
+              return
+            }
+            isExpandingToMainWindow = true
+            
+            // Save conversation and pass ID to AppDelegate before expanding
+            let conversationId = conversationStore.createConversation(messages: session.turns)
+            print("🔵 [Expand Button] Created conversation with ID: \(conversationId)")
+            print("🔵 [Expand Button] Total conversations in store: \(conversationStore.conversations.count)")
+            AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
           }) {
             HStack(spacing: 4) {
               Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -934,11 +987,15 @@ struct ChatView: View {
     
     if let id = currentConversationId {
       // Update existing conversation
+      print("🟡 [MainWindow Save] Updating conversation ID: \(id)")
       conversationStore.updateConversation(id, messages: session.turns)
+      print("🟡 [MainWindow Save] Total conversations in store: \(conversationStore.conversations.count)")
     } else {
       // Create new conversation
+      print("🔴 [MainWindow Save] Creating NEW conversation (currentConversationId was nil!)")
       let newId = conversationStore.createConversation(messages: session.turns)
       currentConversationId = newId
+      print("🔴 [MainWindow Save] Created with ID: \(newId), Total: \(conversationStore.conversations.count)")
     }
   }
 }
@@ -1007,8 +1064,9 @@ struct ChatViewModifiers: ViewModifier {
       AppDelegate.shared?.resetPanelInactivityTimer()
     }
     
-    // Auto-save when messages change in main window (but not during streaming)
-    if displayMode == .mainWindow && newCount > 0 && !session.isStreaming {
+    // Auto-save when messages change in main window (but not during streaming or initial load)
+    // Only save if count increased from a non-zero value (meaning new messages were added after init)
+    if displayMode == .mainWindow && newCount > oldCount && oldCount > 0 && !session.isStreaming {
       onSaveConversation()
     }
   }

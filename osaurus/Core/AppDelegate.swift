@@ -21,7 +21,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverD
 
   private var activityDot: NSView?
   private var modelManagerWindow: NSWindow?
-  private var chatWindow: NSWindow?
+  private var chatWindow: NSWindow?  // Floating panel (quick access)
+  private var mainChatWindow: NSWindow?  // Persistent main window
+  private var panelInactivityTimer: Timer?  // Auto-destroy timer for floating panel
+  private var pendingConversationId: UUID?  // Temp storage for conversation ID during expansion
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     AppDelegate.shared = self
@@ -379,78 +382,191 @@ extension AppDelegate {
   private func setupChatHotKey() {}
 
   @MainActor private func toggleChatOverlay() {
-    if let win = chatWindow, win.isVisible {
+    // Always close existing panel first (enforce single instance)
+    if let win = chatWindow {
       closeChatOverlay()
-    } else {
-      showChatOverlay()
     }
+    // Always create fresh panel with empty chat session
+    showChatOverlay()
   }
 
   @MainActor func showChatOverlay() {
-    if chatWindow == nil {
-      let themeManager = ThemeManager.shared
-      let root = ChatView()
-        .environmentObject(serverController)
-        .environment(\.theme, themeManager.currentTheme)
+    // Always create a fresh panel (no reuse)
+    let themeManager = ThemeManager.shared
+    let root = ChatView(displayMode: .floatingPanel)
+      .environmentObject(serverController)
+      .environment(\.theme, themeManager.currentTheme)
 
-      let controller = NSHostingController(rootView: root)
-      // Create already centered on the active screen to avoid any reposition jank
-      // Start with compact size since chat is initially empty
-      let defaultSize = NSSize(width: 720, height: 250)
-      let mouse = NSEvent.mouseLocation
-      let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-      let initialRect: NSRect
-      if let s = screen {
-        initialRect = centeredRect(size: defaultSize, on: s)
-      } else {
-        initialRect = NSRect(x: 0, y: 0, width: defaultSize.width, height: defaultSize.height)
-      }
-      let win = NSPanel(
-        contentRect: initialRect,
-        styleMask: [.titled, .fullSizeContentView],
-        backing: .buffered,
-        defer: false
-      )
-      // Enable resizing and glass-style translucency
-      win.styleMask.insert(.resizable)
-      win.isOpaque = false
-      win.backgroundColor = .clear
-      win.hidesOnDeactivate = false
-      win.isExcludedFromWindowsMenu = true
-      win.standardWindowButton(.miniaturizeButton)?.isHidden = true
-      win.standardWindowButton(.zoomButton)?.isHidden = true
-      win.titleVisibility = .hidden
-      win.titlebarAppearsTransparent = true
-      win.isMovableByWindowBackground = true
-      win.standardWindowButton(.closeButton)?.isHidden = true
-      win.level = .modalPanel
-      win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-      win.contentViewController = controller
-      win.delegate = self
-      win.animationBehavior = .none
-      chatWindow = win
-      // Pre-layout before showing to avoid initial jank
-      controller.view.layoutSubtreeIfNeeded()
-      NSApp.activate(ignoringOtherApps: true)
-      chatWindow?.makeKeyAndOrderFront(nil)
-      DispatchQueue.main.async {
-        NotificationCenter.default.post(name: .chatOverlayActivated, object: nil)
-      }
-      return
+    let controller = NSHostingController(rootView: root)
+    // Create already centered on the active screen to avoid any reposition jank
+    // Start with compact size since chat is initially empty
+    let defaultSize = NSSize(width: 720, height: 250)
+    let mouse = NSEvent.mouseLocation
+    let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
+    let initialRect: NSRect
+    if let s = screen {
+      initialRect = centeredRect(size: defaultSize, on: s)
+    } else {
+      initialRect = NSRect(x: 0, y: 0, width: defaultSize.width, height: defaultSize.height)
     }
-
-    guard let win = chatWindow else { return }
+    let win = NSPanel(
+      contentRect: initialRect,
+      styleMask: [.titled, .fullSizeContentView],
+      backing: .buffered,
+      defer: false
+    )
+    // Enable resizing and glass-style translucency
+    win.styleMask.insert(.resizable)
+    win.isOpaque = false
+    win.backgroundColor = .clear
+    win.hidesOnDeactivate = false
+    win.isExcludedFromWindowsMenu = true
+    win.standardWindowButton(.miniaturizeButton)?.isHidden = true
+    win.standardWindowButton(.zoomButton)?.isHidden = true
+    win.titleVisibility = .hidden
+    win.titlebarAppearsTransparent = true
+    win.isMovableByWindowBackground = true
+    win.standardWindowButton(.closeButton)?.isHidden = true
+    win.level = .modalPanel
+    win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+    win.contentViewController = controller
+    win.delegate = self
+    win.animationBehavior = .none
+    chatWindow = win
+    // Pre-layout before showing to avoid initial jank
+    controller.view.layoutSubtreeIfNeeded()
     NSApp.activate(ignoringOtherApps: true)
-    if win.isMiniaturized { win.deminiaturize(nil) }
-    centerWindowOnActiveScreen(win)
-    win.makeKeyAndOrderFront(nil)
+    chatWindow?.makeKeyAndOrderFront(nil)
+    
+    // Start 2-minute inactivity timer
+    startPanelInactivityTimer()
+    
     DispatchQueue.main.async {
       NotificationCenter.default.post(name: .chatOverlayActivated, object: nil)
     }
   }
 
   @MainActor func closeChatOverlay() {
+    // Invalidate and clear inactivity timer
+    panelInactivityTimer?.invalidate()
+    panelInactivityTimer = nil
+    
+    // Close and destroy the panel
     chatWindow?.orderOut(nil)
+    chatWindow = nil
+  }
+  
+  // MARK: - Panel Inactivity Timer
+  
+  private func startPanelInactivityTimer() {
+    // Invalidate any existing timer
+    panelInactivityTimer?.invalidate()
+    
+    // Create 2-minute (120 seconds) timer
+    panelInactivityTimer = Timer.scheduledTimer(withTimeInterval: 120.0, repeats: false) { [weak self] _ in
+      Task { @MainActor in
+        self?.closeChatOverlay()
+      }
+    }
+  }
+  
+  func resetPanelInactivityTimer() {
+    // Only reset if panel exists and timer is active
+    guard chatWindow != nil, panelInactivityTimer != nil else { return }
+    startPanelInactivityTimer()
+  }
+  
+  // MARK: - Main Chat Window (Persistent)
+  
+  @MainActor func showMainChatWindow() {
+    // If there's a pending conversation ID and window exists, close it first to recreate with conversation
+    if let window = mainChatWindow, pendingConversationId != nil {
+      saveMainWindowFrame()  // Save frame before closing
+      window.close()
+      mainChatWindow = nil
+    }
+    
+    if let window = mainChatWindow {
+      // Reuse existing window (no pending conversation)
+      NSApp.activate(ignoringOtherApps: true)
+      if window.isMiniaturized { window.deminiaturize(nil) }
+      window.makeKeyAndOrderFront(nil)
+      return
+    }
+    
+    // Create new persistent window with optional conversation ID
+    let themeManager = ThemeManager.shared
+    let root = ChatView(displayMode: .mainWindow, initialConversationId: pendingConversationId)
+      .environmentObject(serverController)
+      .environment(\.theme, themeManager.currentTheme)
+    
+    let controller = NSHostingController(rootView: root)
+    
+    // Load saved frame or use default
+    let savedFrame = loadMainWindowFrame()
+    let defaultFrame = NSRect(x: 0, y: 0, width: 800, height: 600)
+    let initialFrame = savedFrame ?? defaultFrame
+    
+    let window = NSWindow(
+      contentRect: initialFrame,
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+      backing: .buffered,
+      defer: false
+    )
+    
+    window.title = "Osaurus Chat"
+    window.titleVisibility = .visible
+    window.titlebarAppearsTransparent = false
+    window.isMovableByWindowBackground = false
+    window.isOpaque = true
+    window.backgroundColor = NSColor.windowBackgroundColor
+    
+    // Add unified toolbar for modern macOS app look (like VS Code, Claude Desktop)
+    let toolbar = NSToolbar()
+    toolbar.displayMode = .iconOnly
+    window.toolbar = toolbar
+    window.toolbarStyle = .unified
+    
+    window.contentViewController = controller
+    window.delegate = self
+    window.isReleasedWhenClosed = false
+    
+    if savedFrame == nil {
+      window.center()
+    }
+    
+    mainChatWindow = window
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+  
+  @MainActor func expandPanelToWindow(conversationId: UUID) {
+    // Store conversation ID temporarily
+    pendingConversationId = conversationId
+    
+    // Close the panel
+    closeChatOverlay()
+    
+    // Show main window (which will load the conversation by ID)
+    showMainChatWindow()
+    
+    // Clear temporary storage
+    pendingConversationId = nil
+  }
+  
+  // MARK: - Window Frame Persistence
+  
+  private func loadMainWindowFrame() -> NSRect? {
+    guard let frameString = UserDefaults.standard.string(forKey: "MainChatWindowFrame") else {
+      return nil
+    }
+    return NSRectFromString(frameString)
+  }
+  
+  private func saveMainWindowFrame() {
+    guard let window = mainChatWindow else { return }
+    let frameString = NSStringFromRect(window.frame)
+    UserDefaults.standard.set(frameString, forKey: "MainChatWindowFrame")
   }
 }
 
@@ -543,7 +659,14 @@ extension AppDelegate {
   }
 
   func windowWillClose(_ notification: Notification) {
-    guard let win = notification.object as? NSWindow, win == modelManagerWindow else { return }
-    modelManagerWindow = nil
+    guard let win = notification.object as? NSWindow else { return }
+    
+    if win == modelManagerWindow {
+      modelManagerWindow = nil
+    } else if win == mainChatWindow {
+      // Save window frame before closing
+      saveMainWindowFrame()
+      mainChatWindow = nil
+    }
   }
 }
