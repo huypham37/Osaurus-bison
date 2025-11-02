@@ -43,8 +43,8 @@ struct GlassBackground: NSViewRepresentable {
     edgeLightingView.wantsLayer = true
     edgeLightingView.layer?.cornerRadius = cornerRadius
     edgeLightingView.layer?.masksToBounds = true
-    edgeLightingView.layer?.borderWidth = 1.0
-    edgeLightingView.layer?.borderColor = NSColor.white.withAlphaComponent(0.5).cgColor
+    edgeLightingView.layer?.borderWidth = 0  // Disabled - using SwiftUI animated stroke instead
+    edgeLightingView.layer?.borderColor = nil
 
     let containerView = GlassContainerView(
       baseGlassView: baseGlassView,
@@ -88,10 +88,7 @@ struct GlassBackground: NSViewRepresentable {
       container.edgeLightingView.layer?.cornerRadius = cornerRadius
       container.edgeLightingView.layer?.masksToBounds = true
     }
-    // Ensure edge lighting is visible
-    if container.edgeLightingView.layer?.borderWidth == 0 {
-      container.edgeLightingView.layer?.borderWidth = 1.0
-    }
+    // Border disabled - using SwiftUI animated stroke instead
   }
 }
 
@@ -119,19 +116,7 @@ struct GlassSurface: View {
           )
         )
 
-      // Edge lighting stroke
-      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .strokeBorder(
-          LinearGradient(
-            gradient: Gradient(colors: [
-              Color.white.opacity(0.6),
-              Color.white.opacity(0.2),
-            ]),
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-          ),
-          lineWidth: 1.0
-        )
+      // Edge lighting stroke removed - handled by animated overlay in ChatView
     }
     .allowsHitTesting(false)
   }

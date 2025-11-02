@@ -431,7 +431,7 @@ extension AppDelegate {
     win.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     win.contentViewController = controller
     win.delegate = self
-    win.animationBehavior = .none
+    win.animationBehavior = .documentWindow  // Enable animations for SwiftUI content
     chatWindow = win
     // Pre-layout before showing to avoid initial jank
     controller.view.layoutSubtreeIfNeeded()

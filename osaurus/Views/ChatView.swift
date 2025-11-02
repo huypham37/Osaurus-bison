@@ -167,6 +167,10 @@ struct ChatView: View {
   @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
   @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
   
+  // Glow animation states
+  @State private var testAnimationOpacity: Double = 0.3
+  @State private var testAnimationScale: CGFloat = 1.0
+  
   init(
     displayMode: ChatDisplayMode,
     initialConversationId: UUID? = nil
@@ -286,8 +290,20 @@ struct ChatView: View {
   
   private var minimalEntryView: some View {
     ZStack {
-      // Glass background
+      // Glass background with animated glow
       GlassSurface(cornerRadius: 40)
+        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
+        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
+        .overlay(
+          // Subtle glowing border stroke
+          RoundedRectangle(cornerRadius: 40, style: .continuous)
+            .strokeBorder(
+              Color.blue.opacity(0.5),
+              lineWidth: 1.5
+            )
+            .blur(radius: 2)
+            .opacity(testAnimationOpacity)
+        )
         .allowsHitTesting(false)
       
       HStack(spacing: 12) {
@@ -329,6 +345,13 @@ struct ChatView: View {
     }
     .frame(height: 80)
     .padding(.horizontal, 40)
+    .onAppear {
+      // Breathing glow animation
+      withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+        testAnimationOpacity = 1.0
+        testAnimationScale = 1.05
+      }
+    }
   }
   
   private func handleMinimalEntrySend() {
