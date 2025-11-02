@@ -267,8 +267,8 @@ struct ChatView: View {
       minWidth: session.turns.isEmpty ? 500 : 700,
       idealWidth: session.turns.isEmpty ? 600 : 900,
       maxWidth: .infinity,
-      minHeight: session.turns.isEmpty ? 80 : 525,
-      idealHeight: session.turns.isEmpty ? 80 : 700,
+      minHeight: session.turns.isEmpty ? 140 : 525,
+      idealHeight: session.turns.isEmpty ? 140 : 700,
       maxHeight: .infinity
     )
   }
@@ -294,16 +294,6 @@ struct ChatView: View {
       GlassSurface(cornerRadius: 40)
         .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
         .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
-        .overlay(
-          // Subtle glowing border stroke
-          RoundedRectangle(cornerRadius: 40, style: .continuous)
-            .strokeBorder(
-              Color.blue.opacity(0.5),
-              lineWidth: 1.5
-            )
-            .blur(radius: 2)
-            .opacity(testAnimationOpacity)
-        )
         .allowsHitTesting(false)
       
       HStack(spacing: 12) {
