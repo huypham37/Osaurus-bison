@@ -10,19 +10,25 @@ struct MarkdownMessageView: View {
   let baseWidth: CGFloat
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 12) {
       ForEach(parseBlocks(text), id: \.id) { block in
         switch block.kind {
         case .paragraph(let md):
-          if let attributed = try? AttributedString(markdown: md) {
+          // Convert single newlines to double newlines for proper markdown rendering
+          // Markdown treats single newlines as spaces, so we need double newlines for line breaks
+          let markdownText = md.replacingOccurrences(of: "\n", with: "\n\n")
+          if let attributed = try? AttributedString(markdown: markdownText) {
             Text(attributed)
               .font(Typography.body(baseWidth))
+              .lineSpacing(4)
           } else {
             Text(md)
               .font(Typography.body(baseWidth))
+              .lineSpacing(4)
           }
         case .code(let code, let lang):
           CodeBlockView(code: code, language: lang, baseWidth: baseWidth)
+            .padding(.vertical, 4)
         }
       }
     }

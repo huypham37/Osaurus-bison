@@ -98,7 +98,7 @@ struct LightTheme: ThemeProtocol {
   let inputBackground = Color(hex: "ffffff")
   let inputBorder = Color(hex: "d1d5db")
   let glassTintOverlay = Color.black.opacity(0.12)
-  let codeBlockBackground = Color.black.opacity(0.08)
+  let codeBlockBackground = Color(hex: "f6f8fa")  // Lighter, more contrast
 
   // Glass specific
   let glassOpacityPrimary: Double = 0.15
@@ -153,7 +153,7 @@ struct DarkTheme: ThemeProtocol {
   let inputBackground = Color(hex: "18181b")
   let inputBorder = Color(hex: "3f3f46")
   let glassTintOverlay = Color.black.opacity(0.18)
-  let codeBlockBackground = Color.black.opacity(0.35)
+  let codeBlockBackground = Color(hex: "1e1e1e")  // VS Code dark background
 
   // Glass specific
   let glassOpacityPrimary: Double = 0.10
