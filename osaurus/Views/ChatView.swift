@@ -86,7 +86,13 @@ final class ChatSession: ObservableObject {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
     turns.append((.user, trimmed))
-
+    streamResponse()
+  }
+  
+  // Stream response for existing conversation (don't add user message again)
+  func streamResponse() {
+    guard !turns.isEmpty else { return }
+    
     var messages = turns.map { Message(role: $0.role, content: $0.content) }
     let chatCfg = ChatConfigurationStore.load()
     let sys = chatCfg.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -203,12 +209,12 @@ struct ChatView: View {
         if displayMode == .mainWindow,
            let lastMessage = session.turns.last,
            lastMessage.role == .user {
-          print("🔵 [MainWindow] Auto-sending response for loaded conversation")
-          // Re-send the last user message to get AI response
+          print("🔵 [MainWindow] Auto-streaming response for loaded conversation")
+          // Stream response without re-adding the user message
           Task { @MainActor in
             // Give UI a moment to render
             try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-            session.send(lastMessage.content)
+            session.streamResponse()
           }
         }
       }
