@@ -240,11 +240,11 @@ struct ChatView: View {
       chatContent
     }
     .frame(
-      minWidth: showSidebar ? 960 : 700,
-      idealWidth: showSidebar ? 1160 : 900,
+      minWidth: showSidebar ? 800 : 600,
+      idealWidth: showSidebar ? 950 : 750,
       maxWidth: .infinity,
-      minHeight: session.turns.isEmpty ? 200 : 525,
-      idealHeight: session.turns.isEmpty ? 250 : 700,
+      minHeight: session.turns.isEmpty ? 180 : 450,
+      idealHeight: session.turns.isEmpty ? 220 : 580,
       maxHeight: .infinity
     )
   }
@@ -654,15 +654,15 @@ struct ChatView: View {
       @State var hasInitialScroll = false
       ZStack(alignment: .bottomTrailing) {
         ScrollView {
-          LazyVStack(spacing: 16) {
+          LazyVStack(spacing: 12) {
             ForEach(Array(session.turns.enumerated()), id: \.offset) { item in
               let turn = item.element
-              HStack(alignment: .top, spacing: 16) {
+              HStack(alignment: .top, spacing: 12) {
                 if turn.role == .user {
                   Spacer()
                 }
 
-                VStack(alignment: turn.role == .user ? .trailing : .leading, spacing: 8) {
+                VStack(alignment: turn.role == .user ? .trailing : .leading, spacing: 6) {
                   Text(turn.role == .user ? "You" : "Assistant")
                     .font(Typography.small(width))
                     .fontWeight(.medium)
@@ -671,15 +671,15 @@ struct ChatView: View {
                   ZStack(alignment: .topTrailing) {
                     Group {
                       if turn.content.isEmpty && turn.role == .assistant && session.isStreaming {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                           ProgressView()
-                            .scaleEffect(0.8)
+                            .scaleEffect(0.7)
                             .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
                           Text("Thinking…")
                             .font(Typography.body(width))
                             .foregroundColor(theme.primaryText)
                         }
-                        .padding(16)
+                        .padding(12)
                         .background(
                           GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
                         )
@@ -687,7 +687,7 @@ struct ChatView: View {
                         MarkdownMessageView(text: turn.content, baseWidth: width)
                           .font(Typography.body(width))
                           .foregroundColor(theme.primaryText)
-                          .padding(16)
+                          .padding(12)
                           .background(
                             GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
                           )
@@ -708,7 +708,7 @@ struct ChatView: View {
                   }
                 }
                 .frame(
-                  maxWidth: min(width * 0.75, 600),
+                  maxWidth: min(width * 0.70, 500),
                   alignment: turn.role == .user ? .trailing : .leading
                 )
 
@@ -724,8 +724,8 @@ struct ChatView: View {
               .onAppear { isPinnedToBottom = true }
               .onDisappear { isPinnedToBottom = false }
           }
-          .padding(.horizontal, 16)
-          .padding(.vertical, 8)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 6)
           .frame(maxWidth: .infinity)
         }
         .scrollContentBackground(.hidden)

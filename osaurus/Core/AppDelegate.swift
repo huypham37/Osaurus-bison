@@ -383,7 +383,7 @@ extension AppDelegate {
 
   @MainActor private func toggleChatOverlay() {
     // Always close existing panel first (enforce single instance)
-    if let win = chatWindow {
+    if chatWindow != nil {
       closeChatOverlay()
     }
     // Always create fresh panel with empty chat session
@@ -541,17 +541,108 @@ extension AppDelegate {
   }
   
   @MainActor func expandPanelToWindow(conversationId: UUID) {
+    guard let panel = chatWindow else {
+      // Fallback: if panel doesn't exist, just show main window
+      pendingConversationId = conversationId
+      showMainChatWindow()
+      pendingConversationId = nil
+      return
+    }
+    
     // Store conversation ID temporarily
     pendingConversationId = conversationId
     
-    // Close the panel
-    closeChatOverlay()
+    // Stop inactivity timer since we're transitioning
+    panelInactivityTimer?.invalidate()
+    panelInactivityTimer = nil
     
-    // Show main window (which will load the conversation by ID)
-    showMainChatWindow()
+    // Perform smooth morph animation from panel → main window
+    morphPanelToMainWindow(panel: panel, conversationId: conversationId)
+  }
+  
+  @MainActor private func morphPanelToMainWindow(panel: NSWindow, conversationId: UUID) {
+    // 1. Get starting frame (current panel position/size)
+    let startFrame = panel.frame
     
-    // Clear temporary storage
-    pendingConversationId = nil
+    // 2. Calculate target frame (centered main window)
+    let targetSize = NSSize(width: 950, height: 580)
+    let screen = panel.screen ?? NSScreen.main ?? NSScreen.screens[0]
+    let screenFrame = screen.visibleFrame
+    let targetFrame = NSRect(
+      x: screenFrame.midX - targetSize.width / 2,
+      y: screenFrame.midY - targetSize.height / 2,
+      width: targetSize.width,
+      height: targetSize.height
+    )
+    
+    // 3. Create the main window (but don't show it yet)
+    let themeManager = ThemeManager.shared
+    let root = ChatView(displayMode: .mainWindow, initialConversationId: conversationId)
+      .environmentObject(serverController)
+      .environment(\.theme, themeManager.currentTheme)
+    
+    let controller = NSHostingController(rootView: root)
+    
+    // 4. Create main window at the START frame (same as panel)
+    let window = NSWindow(
+      contentRect: startFrame,
+      styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
+      backing: .buffered,
+      defer: false
+    )
+    
+    window.title = "Osaurus Chat"
+    window.titleVisibility = .visible
+    window.titlebarAppearsTransparent = false
+    window.isMovableByWindowBackground = false
+    window.isOpaque = true
+    window.backgroundColor = NSColor.windowBackgroundColor
+    
+    // Add toolbar
+    let toolbar = NSToolbar()
+    toolbar.displayMode = .iconOnly
+    window.toolbar = toolbar
+    window.toolbarStyle = .unified
+    
+    window.contentViewController = controller
+    window.delegate = self
+    window.isReleasedWhenClosed = false
+    
+    // 5. Start with main window semi-transparent (for cross-fade)
+    window.alphaValue = 0.0
+    
+    // 6. Show main window at panel's position
+    mainChatWindow = window
+    window.makeKeyAndOrderFront(nil)
+    
+    // 7. Perform simultaneous animations
+    NSAnimationContext.runAnimationGroup({ context in
+      context.duration = 0.4 // 400ms animation
+      context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+      context.allowsImplicitAnimation = true
+      
+      // Animate main window: opacity + frame
+      window.animator().alphaValue = 1.0
+      window.animator().setFrame(targetFrame, display: true, animate: true)
+      
+      // Animate panel: fade out
+      panel.animator().alphaValue = 0.0
+      
+    }, completionHandler: {
+      // 8. Clean up: close and destroy the floating panel (on main actor)
+      Task { @MainActor in
+        panel.orderOut(nil)
+        self.chatWindow = nil
+        
+        // 9. Ensure main window is fully opaque
+        window.alphaValue = 1.0
+        
+        // 10. Clear temporary storage
+        self.pendingConversationId = nil
+        
+        NSApp.activate(ignoringOtherApps: true)
+      }
+    })
   }
   
   // MARK: - Window Frame Persistence
