@@ -198,6 +198,20 @@ struct ChatView: View {
         onResizeWindow: resizeWindowForContent,
         onSaveConversation: saveCurrentConversation
       ))
+      .onAppear {
+        // Auto-send if main window loaded with a user message that needs a response
+        if displayMode == .mainWindow,
+           let lastMessage = session.turns.last,
+           lastMessage.role == .user {
+          print("🔵 [MainWindow] Auto-sending response for loaded conversation")
+          // Re-send the last user message to get AI response
+          Task { @MainActor in
+            // Give UI a moment to render
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            session.send(lastMessage.content)
+          }
+        }
+      }
   }
 
   // MARK: - Main Content View
@@ -324,47 +338,41 @@ struct ChatView: View {
     
     isSendingMessage = true
     
-    // Send the message and wait for response to complete before expanding
-    session.sendCurrent()
-    
-    // Wait for the response to complete, then expand to main window
+    // For floating panel: save message and expand immediately without streaming
     if displayMode == .floatingPanel {
-      // Use Task to monitor the streaming state
+      // Save the user input before clearing it
+      let userMessage = session.input.trimmingCharacters(in: .whitespacesAndNewlines)
+      session.input = ""
+      
+      // Add user message to session (don't call sendCurrent - we'll send in main window)
+      session.turns.append((.user, userMessage))
+      
       Task { @MainActor in
-        // Wait for streaming to finish
-        while session.isStreaming {
-          try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-        }
-        
-        // Small delay to ensure UI updates
-        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2 seconds
-        
-        // Prevent double-expand
         guard !isExpandingToMainWindow else {
           print("⚠️ [FloatingPanel] Already expanding, skipping")
           return
         }
         isExpandingToMainWindow = true
         
-        // Debug: Print what messages we're saving
-        print("🟢 [FloatingPanel] Saving \(session.turns.count) messages:")
-        for (index, turn) in session.turns.enumerated() {
-          print("   Message \(index + 1): \(turn.role) - \(turn.content.prefix(50))...")
-        }
+        print("🟢 [FloatingPanel] Expanding immediately with user message: \(userMessage.prefix(50))")
         
-        // Save the conversation and get its ID before expanding
+        // Save conversation with just the user message (no assistant response yet)
         let conversationId = conversationStore.createConversation(messages: session.turns)
-        print("🟢 [FloatingPanel] Created conversation with ID: \(conversationId)")
-        print("🟢 [FloatingPanel] Total conversations in store: \(conversationStore.conversations.count)")
+        print("🟢 [FloatingPanel] Created conversation ID: \(conversationId)")
         
-        // Now expand with the conversation ID (not messages)
+        // Trigger immediate morph animation to main window
+        // Main window will load this conversation and automatically start streaming
         AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
         
-        // Reset flags after a delay
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+        // Reset flags after expansion
+        try? await Task.sleep(nanoseconds: 500_000_000)
         isSendingMessage = false
         isExpandingToMainWindow = false
       }
+    } else {
+      // In main window, just send normally
+      session.sendCurrent()
+      isSendingMessage = false
     }
   }
   
