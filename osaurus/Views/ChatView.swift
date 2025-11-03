@@ -60,8 +60,28 @@ final class ChatSession: ObservableObject {
     }
 
     modelOptions = opts
-    // Set default selectedModel to first available
+    // Set default selectedModel to Claude Sonnet 4.5 if available, otherwise first available
     selectedModel = opts.first
+    
+    // Check if OpenCode Claude Sonnet 4.5 becomes available
+    Task {
+      do {
+        let models = try await opencode.getAvailableModels()
+        await MainActor.run {
+          // Find Claude Sonnet 4.5 and set as default
+          for (provider, model, _) in models {
+            let modelName = "\(provider):\(model)"
+            if modelName.contains("claude-sonnet-4.5") {
+              self.selectedModel = modelName
+              print("[ChatSession] Set default model to: \(modelName)")
+              break
+            }
+          }
+        }
+      } catch {
+        print("[ChatSession] Failed to set default model: \(error)")
+      }
+    }
   }
 
   func sendCurrent() {
@@ -162,7 +182,7 @@ struct ChatView: View {
   @State private var isPinnedToBottom: Bool = true
   @State private var inputIsFocused: Bool = false
   @State private var hostWindow: NSWindow?
-  @State private var showSidebar: Bool = true
+  @State private var showSidebar: Bool = false
   @State private var currentConversationId: UUID?
   @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
   @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
@@ -290,11 +310,18 @@ struct ChatView: View {
   
   private var minimalEntryView: some View {
     ZStack {
-      // Glass background with animated glow
+      // Glass background with animated glow…
       GlassSurface(cornerRadius: 40)
-        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
-        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
-        .allowsHitTesting(false)
+//        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
+//        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
+//        .allowsHitTesting(false)
+        .onAppear {
+          // Breathing glow animation - only affects the glass surface shadows
+          withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+            testAnimationOpacity = 1.0
+            testAnimationScale = 1.05
+          }
+        }
       
       HStack(spacing: 12) {
         // Plus icon
@@ -335,13 +362,6 @@ struct ChatView: View {
     }
     .frame(height: 80)
     .padding(.horizontal, 40)
-    .onAppear {
-      // Breathing glow animation
-      withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-        testAnimationOpacity = 1.0
-        testAnimationScale = 1.05
-      }
-    }
   }
   
   private func handleMinimalEntrySend() {
@@ -648,13 +668,13 @@ struct ChatView: View {
           .strokeBorder(
             LinearGradient(
               colors: [
-                Color.white.opacity(0.2),
+                Color.white.opacity(0.06),
                 Color.white.opacity(0.05)
               ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             ),
-            lineWidth: 0.5
+            lineWidth: 0.01
           )
       }
     )
@@ -671,16 +691,24 @@ struct ChatView: View {
             ForEach(Array(session.turns.enumerated()), id: \.offset) { item in
               let turn = item.element
               HStack(alignment: .top, spacing: 12) {
+                // Avatar
                 if turn.role == .user {
-                  Spacer()
+                  Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                      Text("Y")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                    )
+                } else {
+                  Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: 32, height: 32)
                 }
 
-                VStack(alignment: turn.role == .user ? .trailing : .leading, spacing: 6) {
-                  Text(turn.role == .user ? "You" : "Assistant")
-                    .font(Typography.small(width))
-                    .fontWeight(.medium)
-                    .foregroundColor(turn.role == .user ? Color.accentColor : theme.secondaryText)
-
+                VStack(alignment: .leading, spacing: 6) {
                   ZStack(alignment: .topTrailing) {
                     Group {
                       if turn.content.isEmpty && turn.role == .assistant && session.isStreaming {
@@ -693,16 +721,16 @@ struct ChatView: View {
                             .foregroundColor(theme.primaryText)
                         }
                         .padding(12)
-                        .background(
-                          GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
-                        )
                       } else {
                         MarkdownMessageView(text: turn.content, baseWidth: width)
                           .font(Typography.body(width))
                           .foregroundColor(theme.primaryText)
-                          .padding(12)
+                          .padding(turn.role == .user ? 12 : 0)
                           .background(
-                            GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
+                            turn.role == .user ? 
+                              AnyView(RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.15))) : 
+                              AnyView(Color.clear)
                           )
                           .transition(.opacity.combined(with: .scale(scale: 0.95)))
                       }
@@ -716,20 +744,15 @@ struct ChatView: View {
                           .foregroundColor(theme.tertiaryText)
                       }
                       .padding(8)
-                      .offset(x: -8, y: 8)
+                      .offset(x: 8, y: -8)
                     }
                   }
                 }
-                .frame(
-                  maxWidth: min(width * 0.70, 500),
-                  alignment: turn.role == .user ? .trailing : .leading
-                )
-
-                if turn.role == .assistant {
-                  Spacer()
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Spacer(minLength: 0)
               }
-              .frame(maxWidth: .infinity)
+              .frame(maxWidth: .infinity, alignment: .leading)
             }
             Color.clear
               .frame(height: 1)
@@ -845,6 +868,9 @@ struct ChatView: View {
         }
       }
       
+      // Attachment button
+      attachmentButton
+      
       // Send/Stop button
       primaryActionButton
     }
@@ -853,60 +879,61 @@ struct ChatView: View {
   private var primaryActionButton: some View {
     Group {
       if session.isStreaming {
+        // Stop button - circular
         Button(action: { session.stop() }) {
-          HStack(spacing: 6) {
-            Image(systemName: "stop.fill")
-            Text("Stop")
-          }
+          Image(systemName: "stop.fill")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color.red.opacity(0.9)))
+            .contentShape(Circle())
         }
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-          Capsule()
-            .fill(Color.red.opacity(0.9))
-        )
-        .shadow(
-          color: Color.red.opacity(0.3),
-          radius: 8,
-          x: 0,
-          y: 2
-        )
         .buttonStyle(.plain)
+        .shadow(color: Color.red.opacity(0.3), radius: 8, x: 0, y: 2)
         .help("Stop response")
       } else {
+        // Send button - circular with arrow.up
         Button(action: { session.sendCurrent() }) {
-          HStack(spacing: 6) {
-            Image(systemName: "paperplane.fill")
-            Text("Send")
-          }
+          Image(systemName: "arrow.up")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color.accentColor.opacity(0.9)))
+            .contentShape(Circle())
         }
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-          Capsule()
-            .fill(Color.accentColor.opacity(0.9))
-        )
+        .buttonStyle(.plain)
+        .disabled(session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .opacity(session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
         .shadow(
-          color: Color.accentColor.opacity(0.3),
+          color: session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty 
+            ? Color.clear 
+            : Color.accentColor.opacity(0.3),
           radius: 8,
           x: 0,
           y: 2
-        )
-        .buttonStyle(.plain)
-        .disabled(
-          session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        )
-        .opacity(
-          session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1
         )
         .animation(.easeInOut(duration: theme.animationDurationQuick), value: session.input)
         .keyboardShortcut(.return, modifiers: [.command])
+        .help("Send message")
       }
     }
+  }
+  
+  // Attachment button
+  private var attachmentButton: some View {
+    Button(action: { 
+      // TODO: Implement file picker for attachments
+      print("📎 Attachment button tapped - feature coming soon")
+    }) {
+      Image(systemName: "plus")
+        .font(.system(size: 16, weight: .semibold))
+        .foregroundColor(theme.secondaryText)
+        .frame(width: 36, height: 36)
+        .background(Circle().fill(theme.secondaryBackground))
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .help("Attach file (coming soon)")
   }
 
   private var sendButton: some View {
