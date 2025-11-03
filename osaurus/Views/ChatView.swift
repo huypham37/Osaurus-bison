@@ -439,6 +439,10 @@ struct ChatView: View {
 
         VStack(spacing: 10) {
           header(containerWidth)
+            .padding(.horizontal, 20)
+            .frame(maxWidth: 1000)
+            .frame(maxWidth: .infinity)
+          
           if hasAnyModel {
             if !session.turns.isEmpty {
               conversation(containerWidth)
@@ -450,13 +454,16 @@ struct ChatView: View {
             
             // Input bar at the bottom with integrated send button
             inputBarWithButton(containerWidth)
+              .padding(.horizontal, 20)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity)
           } else {
             emptyState
+              .padding(.horizontal, 20)
           }
         }
         .animation(.easeInOut(duration: 0.25), value: session.turns.isEmpty)
-        .padding(20)
-        .frame(maxWidth: 1000)
+        .padding(.vertical, 20)
         .frame(
           maxWidth: .infinity,
           maxHeight: session.turns.isEmpty ? .infinity : .infinity,
@@ -757,7 +764,9 @@ struct ChatView: View {
                 
                 Spacer(minLength: 0)
               }
-              .frame(maxWidth: .infinity, alignment: .leading)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity, alignment: .center)
+              .padding(.horizontal, 20)
             }
             Color.clear
               .frame(height: 1)
@@ -765,12 +774,19 @@ struct ChatView: View {
               .onAppear { isPinnedToBottom = true }
               .onDisappear { isPinnedToBottom = false }
           }
-          .padding(.horizontal, 12)
           .padding(.vertical, 6)
           .frame(maxWidth: .infinity)
         }
         .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible, axes: .vertical)
+        .onAppear {
+          // Make scrollbar subtle after a brief delay to ensure view is loaded
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+              findAndStyleScrollViews(in: window.contentView)
+            }
+          }
+        }
 
         if !isPinnedToBottom && !session.turns.isEmpty {
           Button(action: {
@@ -1316,6 +1332,26 @@ struct HoveringIcon: View {
       isHovered = hovering
     }
     .help(help)
+  }
+}
+
+// MARK: - ScrollView Styling Helper
+func findAndStyleScrollViews(in view: NSView?) {
+  guard let view = view else { return }
+  
+  if let scrollView = view as? NSScrollView {
+    scrollView.scrollerStyle = .overlay
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = true
+    
+    if let scroller = scrollView.verticalScroller {
+      scroller.alphaValue = 0.4
+      scroller.knobStyle = .light
+    }
+  }
+  
+  for subview in view.subviews {
+    findAndStyleScrollViews(in: subview)
   }
 }
 
