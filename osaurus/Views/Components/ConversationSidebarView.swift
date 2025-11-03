@@ -13,6 +13,7 @@ struct ConversationSidebarView: View {
   
   var onSelectConversation: (UUID) -> Void
   var onNewChat: () -> Void
+  var onToggleSidebar: () -> Void
   
   @State private var hoveredId: UUID?
   @State private var editingId: UUID?
@@ -48,6 +49,14 @@ struct ConversationSidebarView: View {
   
   private var header: some View {
     HStack {
+      // Sidebar toggle button
+      Button(action: onToggleSidebar) {
+        Image(systemName: "sidebar.left")
+          .font(.system(size: 14))
+      }
+      .buttonStyle(.borderless)
+      .help("Hide Sidebar")
+      
       Text("Conversations")
         .font(.system(size: 13, weight: .semibold))
         .foregroundColor(.secondary)
@@ -132,6 +141,7 @@ struct ConversationSidebarView: View {
     .background(
       RoundedRectangle(cornerRadius: 6)
         .fill(isSelected ? Color.accentColor.opacity(0.15) : (isHovered ? Color.gray.opacity(0.1) : Color.clear))
+      
     )
     .contentShape(Rectangle())
     .onTapGesture {

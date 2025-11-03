@@ -301,6 +301,11 @@ struct ChatView: View {
       },
       onNewChat: {
         createNewChat()
+      },
+      onToggleSidebar: {
+        withAnimation {
+          showSidebar.toggle()
+        }
       }
     )
     .frame(minWidth: 260, maxWidth: 260)
@@ -490,8 +495,8 @@ struct ChatView: View {
     VStack(spacing: 12) {
       // Top row: sidebar toggle, title, and buttons
       HStack(spacing: 12) {
-        // Sidebar toggle button (only for main window)
-        if displayMode == .mainWindow {
+        // Sidebar toggle button (only for main window when sidebar is hidden)
+        if displayMode == .mainWindow && !showSidebar {
           Button(action: { 
             withAnimation {
               showSidebar.toggle()
@@ -501,7 +506,7 @@ struct ChatView: View {
               .foregroundColor(theme.secondaryText)
           }
           .buttonStyle(.plain)
-          .help(showSidebar ? "Hide Sidebar" : "Show Sidebar")
+          .help("Show Sidebar")
         }
         
         Spacer()
