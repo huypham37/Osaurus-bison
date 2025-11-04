@@ -181,6 +181,7 @@ struct ChatView: View {
   @State private var focusTrigger: Int = 0
   @State private var isPinnedToBottom: Bool = true
   @State private var inputIsFocused: Bool = false
+  @State private var inputHeight: CGFloat = 36
   @State private var hostWindow: NSWindow?
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var currentConversationId: UUID?
@@ -841,11 +842,13 @@ struct ChatView: View {
       // Input field
       ChatInputContainer(
         text: $session.input,
+        measuredHeight: $inputHeight,
         isFocused: $inputIsFocused,
         onCommit: { session.sendCurrent() },
         onFocusChange: { focused in inputIsFocused = focused }
       )
-      .frame(height: 60) // Adjust height as needed
+      .frame(height: inputHeight)
+      .animation(.easeInOut(duration: 0.2), value: inputHeight)
       
       // Attachment button
       attachmentButton

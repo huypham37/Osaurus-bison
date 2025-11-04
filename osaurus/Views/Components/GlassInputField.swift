@@ -2,101 +2,13 @@
 //  GlassInputField.swift
 //  osaurus
 //
-//  Glass-effect input field with backdrop blur and accent glow
+//  AppKit-based auto-sizing text input with NSTextView
+//  Bridges AppKit NSTextView to SwiftUI with height measurement
 //
 
 import SwiftUI
 
-struct GlassInputField: View {
-  @Binding var text: String
-  @FocusState private var isFocused: Bool
-  var placeholder: String = "Message…"
-  var onCommit: () -> Void
-
-  @Environment(\.colorScheme) private var colorScheme
-  @State private var glowAnimation: Bool = false
-
-  var body: some View {
-    ZStack(alignment: .topLeading) {
-      // Glass background
-      RoundedRectangle(cornerRadius: 16, style: .continuous)
-        .fill(glassBackground)
-        .overlay(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(borderColor, lineWidth: isFocused ? 1.5 : 0.5)
-        )
-        .shadow(
-          color: isFocused ? Color.accentColor.opacity(0.3) : Color.clear,
-          radius: isFocused ? 20 : 0,
-          x: 0,
-          y: 0
-        )
-
-      // Placeholder
-      if text.isEmpty {
-        Text(placeholder)
-          .font(.system(size: 15))
-          .foregroundColor(Color.secondary.opacity(0.8))
-          .padding(.horizontal, 12)
-          .padding(.vertical, 10)
-          .allowsHitTesting(false)
-      }
-
-      // Text Editor
-      TextEditor(text: $text)
-        .font(.system(size: 15))
-        .scrollContentBackground(.hidden)
-        .background(Color.clear)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .focused($isFocused)
-        .onSubmit {
-          onCommit()
-        }
-    }
-    .animation(.easeInOut(duration: 0.3), value: isFocused)
-    .onAppear {
-      withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-        glowAnimation = true
-      }
-    }
-  }
-
-  private var glassBackground: some ShapeStyle {
-    LinearGradient(
-      colors: [
-        Color.white.opacity(colorScheme == .dark ? 0.08 : 0.1),
-        Color.white.opacity(colorScheme == .dark ? 0.05 : 0.08),
-      ],
-      startPoint: .topLeading,
-      endPoint: .bottomTrailing
-    )
-  }
-
-  private var borderColor: some ShapeStyle {
-    if isFocused {
-      return LinearGradient(
-        colors: [
-          Color.accentColor.opacity(0.8),
-          Color.accentColor.opacity(0.4),
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-    } else {
-      return LinearGradient(
-        colors: [
-          Color.white.opacity(0.2),
-          Color.white.opacity(0.1),
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-      )
-    }
-  }
-}
-
-// Custom scroll view with constrained intrinsic size
+// MARK: - Custom scroll view with constrained intrinsic size
 class ConstrainedHeightScrollView: NSScrollView {
   var minHeight: CGFloat = 36
   var maxHeight: CGFloat = 120
@@ -120,6 +32,7 @@ class ConstrainedHeightScrollView: NSScrollView {
 // SwiftUI wrapper for the custom text view
 struct GlassInputFieldBridge: NSViewRepresentable {
   @Binding var text: String
+  @Binding var measuredHeight: CGFloat
   var isFocused: Bool
   var onCommit: () -> Void
   var onFocusChange: ((Bool) -> Void)?
@@ -166,8 +79,8 @@ struct GlassInputFieldBridge: NSViewRepresentable {
 
     if textView.string != text {
       textView.string = text
-      // Invalidate intrinsic size when text changes
-      nsView.invalidateIntrinsicContentSize()
+      // Measure and update height
+      context.coordinator.remeasure(textView: textView, scrollView: nsView)
     }
 
     if isFocused && nsView.window?.firstResponder != textView {
@@ -189,8 +102,30 @@ struct GlassInputFieldBridge: NSViewRepresentable {
     }
 
     func textDidChange(_ notification: Notification) {
-      guard let textView = notification.object as? NSTextView else { return }
+      guard let textView = notification.object as? NSTextView,
+            let scrollView = textView.enclosingScrollView as? ConstrainedHeightScrollView else { return }
       parent.text = textView.string
+      remeasure(textView: textView, scrollView: scrollView)
+    }
+    
+    func remeasure(textView: NSTextView, scrollView: ConstrainedHeightScrollView) {
+      guard let layoutManager = textView.layoutManager,
+            let textContainer = textView.textContainer else { return }
+      
+      // Ensure layout is up to date
+      layoutManager.ensureLayout(for: textContainer)
+      
+      // Calculate content height
+      let usedRect = layoutManager.usedRect(for: textContainer)
+      let contentHeight = usedRect.height + textView.textContainerInset.height * 2
+      
+      // Clamp between min and max
+      let clampedHeight = max(parent.minHeight, min(parent.maxHeight, contentHeight))
+      
+      // Update SwiftUI binding on main thread
+      DispatchQueue.main.async {
+        self.parent.measuredHeight = clampedHeight
+      }
     }
 
     func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
