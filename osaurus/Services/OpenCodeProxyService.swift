@@ -61,7 +61,40 @@ struct OpenCodeModelInfo: Codable {
 
 struct OpenCodeMessagePartInput: Codable {
     let type: String
-    let text: String
+    let text: String?
+    let source: ImageSource?  // For images (Anthropic format)
+    
+    // Text-only init (backward compatibility)
+    init(type: String, text: String) {
+        self.type = type
+        self.text = text
+        self.source = nil
+    }
+    
+    // Image init (Anthropic/Claude format)
+    init(type: String, base64Data: String, mimeType: String) {
+        self.type = type
+        self.text = nil
+        self.source = ImageSource(type: "base64", mediaType: mimeType, data: base64Data)
+    }
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case text
+        case source
+    }
+}
+
+struct ImageSource: Codable {
+    let type: String  // "base64"
+    let mediaType: String  // "image/jpeg", "image/png", etc.
+    let data: String  // Base64 data
+    
+    enum CodingKeys: String, CodingKey {
+        case type
+        case mediaType = "media_type"
+        case data
+    }
 }
 
 /// Message response from OpenCode
@@ -149,7 +182,27 @@ final class OpenCodeProxyService: ModelService {
         prompt: String,
         parameters: GenerationParameters
     ) async throws -> AsyncStream<String> {
-        print("[OpenCodeProxy] streamDeltas called with prompt: \(prompt.prefix(50))...")
+        // Delegate to multimodal method with no attachments
+        return try await streamDeltasWithAttachments(
+            prompt: prompt,
+            parameters: parameters,
+            attachments: []
+        )
+    }
+    
+    /// Stream deltas with multimodal support (text + images)
+    /// - Parameters:
+    ///   - prompt: Text prompt
+    ///   - parameters: Generation parameters
+    ///   - attachments: Array of image attachments (base64 encoded)
+    func streamDeltasWithAttachments(
+        prompt: String,
+        parameters: GenerationParameters,
+        attachments: [Attachment]
+    ) async throws -> AsyncStream<String> {
+        print("[OpenCodeProxy] streamDeltasWithAttachments called")
+        print("[OpenCodeProxy] Prompt: \(prompt.prefix(50))...")
+        print("[OpenCodeProxy] Attachments: \(attachments.count)")
 
         // Ensure we have a session
         if currentSessionID == nil {
@@ -163,8 +216,24 @@ final class OpenCodeProxyService: ModelService {
             throw OpenCodeError.noSession
         }
 
-        // Send the full conversation prompt to maintain context
-        print("[OpenCodeProxy] Sending full conversation prompt: \(prompt.prefix(100))...")
+        // Build multimodal parts array
+        var parts: [OpenCodeMessagePartInput] = []
+        
+        // Add text part first
+        parts.append(OpenCodeMessagePartInput(type: "text", text: prompt))
+        
+        // Add image parts (Anthropic/Claude API format)
+        for attachment in attachments {
+            print("[OpenCodeProxy] Adding image: \(attachment.fileName) (\(attachment.formattedFileSize))")
+            print("[OpenCodeProxy] MIME type: \(attachment.mimeType), data length: \(attachment.base64Data.count)")
+            parts.append(OpenCodeMessagePartInput(
+                type: "image",
+                base64Data: attachment.base64Data,
+                mimeType: attachment.mimeType
+            ))
+        }
+
+        print("[OpenCodeProxy] Sending \(parts.count) parts to OpenCode")
 
         return AsyncStream { continuation in
             Task {
@@ -177,15 +246,13 @@ final class OpenCodeProxyService: ModelService {
                     // Small delay to ensure event stream is connected
                     try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
-                    // Send full conversation to OpenCode to maintain context
+                    // Send multimodal message to OpenCode
                     let messageRequest = OpenCodeMessageRequest(
                         model: OpenCodeModelInfo(
                             providerID: "github-copilot",
                             modelID: "claude-sonnet-4.5"
                         ),
-                        parts: [
-                            OpenCodeMessagePartInput(type: "text", text: prompt)
-                        ],
+                        parts: parts,
                         noReply: false
                     )
 

@@ -24,7 +24,9 @@ final class ChatSession: ObservableObject {
   @Published var selectedModel: String? = nil
   @Published var modelOptions: [String] = []
   @Published var scrollTick: Int = 0
+  @Published var attachments: [Attachment] = []
   private var currentTask: Task<Void, Never>?
+  private var currentAttachments: [Attachment] = []
 
   init(initialConversation: [(role: MessageRole, content: String)] = []) {
     // Set initial conversation if provided
@@ -87,8 +89,10 @@ final class ChatSession: ObservableObject {
   func sendCurrent() {
     guard !isStreaming else { return }
     let text = input
+    let currentAttachments = attachments
     input = ""
-    send(text)
+    attachments = []  // Clear attachments after capturing
+    send(text, attachments: currentAttachments)
   }
 
   func stop() {
@@ -102,11 +106,26 @@ final class ChatSession: ObservableObject {
     input = ""
   }
 
-  func send(_ text: String) {
+  func send(_ text: String, attachments: [Attachment] = []) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    turns.append((.user, trimmed))
+    
+    // Allow sending if there's text OR attachments
+    guard !trimmed.isEmpty || !attachments.isEmpty else { return }
+    
+    // For now, store attachment info in the content string
+    // TODO: Refactor to store multimodal content properly
+    var content = trimmed
+    if !attachments.isEmpty {
+      let attachmentInfo = attachments.map { "📎 \($0.fileName)" }.joined(separator: "\n")
+      content = content.isEmpty ? attachmentInfo : "\(content)\n\(attachmentInfo)"
+    }
+    
+    turns.append((.user, content))
+    
+    // Store attachments temporarily for the streaming call
+    currentAttachments = attachments
     streamResponse()
+    currentAttachments = []
   }
   
   // Stream response for existing conversation (don't add user message again)
@@ -148,7 +167,21 @@ final class ChatSession: ObservableObject {
         let idx = turns.count - 1
         let params = GenerationParameters(temperature: 0.7, maxTokens: 1024)
         do {
-          let stream = try await svc.streamDeltas(prompt: prompt, parameters: params)
+          // Check if we're using OpenCode with attachments (multimodal)
+          let stream: AsyncStream<String>
+          if let openCodeService = svc as? OpenCodeProxyService,
+             !currentAttachments.isEmpty {
+            print("[ChatView] Using OpenCode multimodal streaming with \(currentAttachments.count) attachments")
+            stream = try await openCodeService.streamDeltasWithAttachments(
+              prompt: prompt,
+              parameters: params,
+              attachments: currentAttachments
+            )
+          } else {
+            // Standard text-only streaming
+            stream = try await svc.streamDeltas(prompt: prompt, parameters: params)
+          }
+          
           for await delta in stream {
             if Task.isCancelled { break }
             if !delta.isEmpty {
@@ -838,23 +871,38 @@ struct ChatView: View {
   }
 
   private func inputBarWithButton(_ width: CGFloat) -> some View {
-    HStack(alignment: .bottom, spacing: 12) {
-      // Input field
-      ChatInputContainer(
-        text: $session.input,
-        measuredHeight: $inputHeight,
-        isFocused: $inputIsFocused,
-        onCommit: { session.sendCurrent() },
-        onFocusChange: { focused in inputIsFocused = focused }
-      )
-      .frame(height: inputHeight)
-      .animation(.easeInOut(duration: 0.2), value: inputHeight)
+    VStack(spacing: 0) {
+      // Attachments container (shown only when there are attachments)
+      if !session.attachments.isEmpty {
+        AttachmentsContainer(
+          attachments: session.attachments,
+          onRemove: { attachment in
+            withAnimation(.easeInOut(duration: 0.2)) {
+              session.attachments.removeAll { $0.id == attachment.id }
+            }
+          }
+        )
+        .transition(.move(edge: .top).combined(with: .opacity))
+      }
       
-      // Attachment button
-      attachmentButton
-      
-      // Send/Stop button
-      primaryActionButton
+      HStack(alignment: .bottom, spacing: 12) {
+        // Input field
+        ChatInputContainer(
+          text: $session.input,
+          measuredHeight: $inputHeight,
+          isFocused: $inputIsFocused,
+          onCommit: { session.sendCurrent() },
+          onFocusChange: { focused in inputIsFocused = focused }
+        )
+        .frame(height: inputHeight)
+        .animation(.easeInOut(duration: 0.2), value: inputHeight)
+        
+        // Attachment button
+        attachmentButton
+        
+        // Send/Stop button
+        primaryActionButton
+      }
     }
   }
 
@@ -904,10 +952,23 @@ struct ChatView: View {
   // Attachment button
   private var attachmentButton: some View {
     Button(action: { 
-      // TODO: Implement file picker for attachments
-      print("📎 Attachment button tapped - feature coming soon")
+      Task {
+        do {
+          if let attachment = try await AttachmentService.pickImage() {
+            withAnimation(.easeInOut(duration: 0.2)) {
+              session.attachments.append(attachment)
+            }
+          }
+        } catch let error as AttachmentError {
+          // Show error to user
+          print("❌ Attachment error: \(error.localizedDescription)")
+          // TODO: Show user-facing error alert
+        } catch {
+          print("❌ Unexpected attachment error: \(error)")
+        }
+      }
     }) {
-      Image(systemName: "plus")
+      Image(systemName: "paperclip")
         .font(.system(size: 16, weight: .semibold))
         .foregroundColor(theme.secondaryText)
         .frame(width: 36, height: 36)
@@ -915,7 +976,7 @@ struct ChatView: View {
         .contentShape(Circle())
     }
     .buttonStyle(.plain)
-    .help("Attach file (coming soon)")
+    .help("Attach image (.jpg, .png, .webp, max 5MB)")
   }
 
   private var sendButton: some View {
