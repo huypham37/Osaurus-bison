@@ -264,6 +264,19 @@ struct ChatView: View {
     } detail: {
       // Detail column (chat content)
       chatContent
+        .toolbar {
+          ToolbarItem(placement: .navigation) {
+            modelPicker
+          }
+          
+          ToolbarItem(placement: .automatic) {
+            Spacer()
+          }
+          
+          ToolbarItem(placement: .automatic) {
+            newChatButton
+          }
+        }
     }
     .navigationSplitViewStyle(.balanced)
     .frame(
@@ -440,10 +453,13 @@ struct ChatView: View {
         }
 
         VStack(spacing: 10) {
-          header(containerWidth)
-            .padding(.horizontal, 20)
-            .frame(maxWidth: 1000)
-            .frame(maxWidth: .infinity)
+          // Only show header for floating panel, main window uses toolbar
+          if displayMode == .floatingPanel {
+            header(containerWidth)
+              .padding(.horizontal, 20)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity)
+          }
           
           if hasAnyModel {
             if !session.turns.isEmpty {
@@ -501,82 +517,46 @@ struct ChatView: View {
   }
 
   private func header(_ width: CGFloat) -> some View {
-    VStack(spacing: 12) {
-      // Top row: sidebar toggle, title, and buttons
-      HStack(spacing: 12) {
-      // Sidebar toggle button (only for main window when sidebar is hidden)
-      if displayMode == .mainWindow && columnVisibility == .detailOnly {
+    HStack(spacing: 12) {
+      // Model picker in title bar area
+      modelPicker
+      
+      Spacer()
+      
+      // Show "Expand" button only in floating panel mode when conversation exists
+      if displayMode == .floatingPanel && !session.turns.isEmpty {
         Button(action: { 
-          withAnimation {
-            columnVisibility = .all
+          guard !isExpandingToMainWindow else {
+            print("⚠️ [FloatingPanel] Already expanding, ignoring button click")
+            return
           }
+          isExpandingToMainWindow = true
+          
+          // Save conversation and pass ID to AppDelegate before expanding
+          let conversationId = conversationStore.createConversation(messages: session.turns)
+          print("🔵 [Expand Button] Created conversation with ID: \(conversationId)")
+          print("🔵 [Expand Button] Total conversations in store: \(conversationStore.conversations.count)")
+          AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
         }) {
-          Image(systemName: "sidebar.left")
-            .foregroundColor(theme.secondaryText)
+          HStack(spacing: 4) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+            Text("Expand")
+          }
+          .font(.system(size: 13, weight: .medium))
+          .foregroundColor(Color.accentColor)
         }
         .buttonStyle(.plain)
-        .help("Show Sidebar")
-      }
-        
-        Spacer()
-        
-        if !session.turns.isEmpty {
-          Button(action: { 
-            if displayMode == .mainWindow {
-              // In main window, ask to save before resetting
-              createNewChat()
-            } else {
-              session.reset()
-            }
-          }) {
-            Image(systemName: displayMode == .mainWindow ? "plus" : "trash")
-              .foregroundColor(theme.secondaryText)
-          }
-          .buttonStyle(.plain)
-          .help(displayMode == .mainWindow ? "New Chat" : "Reset chat")
-        }
-        
-        // Show "Expand" button only in floating panel mode when conversation exists
-        if displayMode == .floatingPanel && !session.turns.isEmpty {
-          Button(action: { 
-            guard !isExpandingToMainWindow else {
-              print("⚠️ [FloatingPanel] Already expanding, ignoring button click")
-              return
-            }
-            isExpandingToMainWindow = true
-            
-            // Save conversation and pass ID to AppDelegate before expanding
-            let conversationId = conversationStore.createConversation(messages: session.turns)
-            print("🔵 [Expand Button] Created conversation with ID: \(conversationId)")
-            print("🔵 [Expand Button] Total conversations in store: \(conversationStore.conversations.count)")
-            AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
-          }) {
-            HStack(spacing: 4) {
-              Image(systemName: "arrow.up.left.and.arrow.down.right")
-              Text("Expand")
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(Color.accentColor)
-          }
-          .buttonStyle(.plain)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(
-            Capsule()
-              .fill(Color.accentColor.opacity(0.1))
-              .overlay(
-                Capsule()
-                  .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
-              )
-          )
-          .help("Expand to main window")
-        }
-      }
-      
-      // Second row: Model selector
-      HStack(spacing: 12) {
-        modelPicker
-        Spacer()
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+          Capsule()
+            .fill(Color.accentColor.opacity(0.1))
+            .overlay(
+              Capsule()
+                .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
+            )
+        )
+        .help("Expand to main window")
       }
     }
   }
@@ -602,7 +582,7 @@ struct ChatView: View {
               endPoint: .bottomTrailing
             )
           )
-          .frame(width: 28, height: 28)
+          .frame(width: 24, height: 24)
           .overlay(
             Circle()
               .fill(
@@ -610,16 +590,16 @@ struct ChatView: View {
                   colors: [Color.white.opacity(0.3), Color.clear],
                   center: .topLeading,
                   startRadius: 0,
-                  endRadius: 20
+                  endRadius: 16
                 )
               )
           )
         
         Image(systemName: "sparkles")
-          .font(.system(size: 13, weight: .semibold))
+          .font(.system(size: 11, weight: .semibold))
           .foregroundColor(.white)
       }
-      .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
+      .shadow(color: Color.blue.opacity(0.3), radius: 3, x: 0, y: 1.5)
       
       // Model name and picker
       if session.modelOptions.count > 1 {
@@ -656,8 +636,8 @@ struct ChatView: View {
         }
       }
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 8)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 4)
     .background(
       ZStack {
         // Liquid glass effect base
@@ -694,6 +674,21 @@ struct ChatView: View {
     )
     .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+  }
+  
+  // MARK: - New Chat Button
+  
+  private var newChatButton: some View {
+    Button(action: {
+      createNewChat()
+    }) {
+      Image(systemName: "plus")
+        .font(.system(size: 14, weight: .medium))
+        .foregroundColor(theme.primaryText)
+        .frame(width: 28, height: 28)
+    }
+    .buttonStyle(.borderless)
+    .help("New Chat")
   }
 
   private func conversation(_ width: CGFloat) -> some View {
