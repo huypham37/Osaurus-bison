@@ -380,7 +380,7 @@ struct ChatView: View {
       .padding(.horizontal, 24)
       .padding(.vertical, 18)
     }
-    .frame(height: 80)
+    .frame(height: 60) // Adjust this value to control initial input field height
     .padding(.horizontal, 40)
   }
   
@@ -682,10 +682,15 @@ struct ChatView: View {
     Button(action: {
       createNewChat()
     }) {
-      Image(systemName: "plus")
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(theme.primaryText)
-        .frame(width: 28, height: 28)
+      ZStack {
+        Circle()
+          .fill(theme.secondaryBackground.opacity(0.5))
+          .frame(width: 28, height: 28)
+        
+        Image(systemName: "plus")
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(theme.primaryText)
+      }
     }
     .buttonStyle(.borderless)
     .help("New Chat")
@@ -834,57 +839,13 @@ struct ChatView: View {
   private func inputBarWithButton(_ width: CGFloat) -> some View {
     HStack(alignment: .bottom, spacing: 12) {
       // Input field
-      ZStack(alignment: .topLeading) {
-        GlassInputFieldBridge(
-          text: $session.input,
-          isFocused: inputIsFocused,
-          onCommit: { session.sendCurrent() },
-          onFocusChange: { focused in inputIsFocused = focused }
-        )
-        .frame(minHeight: 48, maxHeight: 120)
-        .background(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-              theme.glassOpacityTertiary == 0.05
-                ? theme.secondaryBackground.opacity(0.4) : theme.primaryBackground.opacity(0.4)
-            )
-            .background(
-              RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-            )
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(
-              inputIsFocused
-                ? LinearGradient(
-                  colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.3)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
-                : LinearGradient(
-                  colors: [theme.glassEdgeLight, theme.glassEdgeLight.opacity(0.3)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                ),
-              lineWidth: inputIsFocused ? 1.5 : 0.5
-            )
-        )
-        .shadow(
-          color: inputIsFocused ? Color.accentColor.opacity(0.2) : Color.clear,
-          radius: inputIsFocused ? 20 : 0
-        )
-        .animation(.easeInOut(duration: theme.animationDurationMedium), value: inputIsFocused)
-
-        if session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          Text("Type your message…")
-            .font(.system(size: 15))
-            .foregroundColor(theme.tertiaryText)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .allowsHitTesting(false)
-        }
-      }
+      ChatInputContainer(
+        text: $session.input,
+        isFocused: $inputIsFocused,
+        onCommit: { session.sendCurrent() },
+        onFocusChange: { focused in inputIsFocused = focused }
+      )
+      .frame(height: 60) // Adjust height as needed
       
       // Attachment button
       attachmentButton

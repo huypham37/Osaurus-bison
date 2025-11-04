@@ -96,15 +96,40 @@ struct GlassInputField: View {
   }
 }
 
+// Custom scroll view with constrained intrinsic size
+class ConstrainedHeightScrollView: NSScrollView {
+  var minHeight: CGFloat = 36
+  var maxHeight: CGFloat = 120
+  
+  override var intrinsicContentSize: NSSize {
+    guard let textView = documentView as? NSTextView else {
+      return NSSize(width: NSView.noIntrinsicMetric, height: minHeight)
+    }
+    
+    // Calculate actual content height
+    textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+    let contentHeight = textView.layoutManager?.usedRect(for: textView.textContainer!).height ?? 0
+    let totalHeight = contentHeight + textView.textContainerInset.height * 2
+    
+    // Clamp between min and max
+    let constrainedHeight = max(minHeight, min(maxHeight, totalHeight))
+    return NSSize(width: NSView.noIntrinsicMetric, height: constrainedHeight)
+  }
+}
+
 // SwiftUI wrapper for the custom text view
 struct GlassInputFieldBridge: NSViewRepresentable {
   @Binding var text: String
   var isFocused: Bool
   var onCommit: () -> Void
   var onFocusChange: ((Bool) -> Void)?
+  var minHeight: CGFloat = 36
+  var maxHeight: CGFloat = 120
 
-  func makeNSView(context: Context) -> NSScrollView {
-    let scrollView = NSScrollView()
+  func makeNSView(context: Context) -> ConstrainedHeightScrollView {
+    let scrollView = ConstrainedHeightScrollView()
+    scrollView.minHeight = minHeight
+    scrollView.maxHeight = maxHeight
     scrollView.drawsBackground = false
     scrollView.hasVerticalScroller = true
     scrollView.autohidesScrollers = true
@@ -119,17 +144,30 @@ struct GlassInputFieldBridge: NSViewRepresentable {
     textView.string = text
     textView.textContainerInset = NSSize(width: 8, height: 8)
     textView.drawsBackground = false
+    
+    // Remove extra padding from text container
+    textView.textContainer?.lineFragmentPadding = 0
+    
+    // Set paragraph style to minimize spacing
+    let paragraphStyle = NSMutableParagraphStyle()
+    paragraphStyle.lineSpacing = 0
+    paragraphStyle.paragraphSpacing = 0
+    paragraphStyle.paragraphSpacingBefore = 0
+    textView.defaultParagraphStyle = paragraphStyle
+    textView.typingAttributes[.paragraphStyle] = paragraphStyle
 
     scrollView.documentView = textView
 
     return scrollView
   }
 
-  func updateNSView(_ nsView: NSScrollView, context: Context) {
+  func updateNSView(_ nsView: ConstrainedHeightScrollView, context: Context) {
     guard let textView = nsView.documentView as? NSTextView else { return }
 
     if textView.string != text {
       textView.string = text
+      // Invalidate intrinsic size when text changes
+      nsView.invalidateIntrinsicContentSize()
     }
 
     if isFocused && nsView.window?.firstResponder != textView {

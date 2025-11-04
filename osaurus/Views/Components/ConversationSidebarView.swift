@@ -49,26 +49,11 @@ struct ConversationSidebarView: View {
   
   private var header: some View {
     HStack {
-      // Sidebar toggle button
-      Button(action: onToggleSidebar) {
-        Image(systemName: "sidebar.left")
-          .font(.system(size: 14))
-      }
-      .buttonStyle(.borderless)
-      .help("Hide Sidebar")
-      
       Text("Conversations")
         .font(.system(size: 13, weight: .semibold))
         .foregroundColor(.secondary)
       
       Spacer()
-      
-      Button(action: onNewChat) {
-        Image(systemName: "square.and.pencil")
-          .font(.system(size: 14))
-      }
-      .buttonStyle(.borderless)
-      .help("New Chat")
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 10)

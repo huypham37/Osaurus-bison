@@ -516,7 +516,7 @@ extension AppDelegate {
     
     window.title = "Osaurus Chat"
     // Apple Liquid Glass title bar style - translucent title bar with vibrancy
-    window.titleVisibility = .visible
+    window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.isMovableByWindowBackground = true
     
@@ -592,7 +592,7 @@ extension AppDelegate {
     
     window.title = "Osaurus Chat"
     // Apple Liquid Glass title bar style - translucent title bar with vibrancy
-    window.titleVisibility = .visible
+    window.titleVisibility = .hidden
     window.titlebarAppearsTransparent = true
     window.isMovableByWindowBackground = true
     
