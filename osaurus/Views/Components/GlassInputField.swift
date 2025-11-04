@@ -55,7 +55,7 @@ struct GlassInputFieldBridge: NSViewRepresentable {
     textView.backgroundColor = .clear
     textView.textColor = NSColor.labelColor
     textView.string = text
-    textView.textContainerInset = NSSize(width: 8, height: 8)
+    textView.textContainerInset = NSSize(width: 12, height: 8)
     textView.drawsBackground = false
     
     // Remove extra padding from text container
