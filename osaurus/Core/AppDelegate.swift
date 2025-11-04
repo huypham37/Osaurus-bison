@@ -515,13 +515,12 @@ extension AppDelegate {
     )
     
     window.title = "Osaurus Chat"
+    // Apple Liquid Glass title bar style - translucent title bar with vibrancy
     window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
-    window.isMovableByWindowBackground = false
-    window.isOpaque = true
-    window.backgroundColor = NSColor.windowBackgroundColor
+    window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = true
     
-    // Add unified toolbar for modern macOS app look (like VS Code, Claude Desktop)
+    // Add unified toolbar for modern macOS app look with Liquid Glass aesthetic
     let toolbar = NSToolbar()
     toolbar.displayMode = .iconOnly
     window.toolbar = toolbar
@@ -592,13 +591,12 @@ extension AppDelegate {
     )
     
     window.title = "Osaurus Chat"
+    // Apple Liquid Glass title bar style - translucent title bar with vibrancy
     window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
-    window.isMovableByWindowBackground = false
-    window.isOpaque = true
-    window.backgroundColor = NSColor.windowBackgroundColor
+    window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = true
     
-    // Add toolbar
+    // Add toolbar with Liquid Glass aesthetic
     let toolbar = NSToolbar()
     toolbar.displayMode = .iconOnly
     window.toolbar = toolbar

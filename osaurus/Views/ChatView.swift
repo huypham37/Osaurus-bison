@@ -182,7 +182,7 @@ struct ChatView: View {
   @State private var isPinnedToBottom: Bool = true
   @State private var inputIsFocused: Bool = false
   @State private var hostWindow: NSWindow?
-  @State private var showSidebar: Bool = false
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var currentConversationId: UUID?
   @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
   @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
@@ -257,15 +257,18 @@ struct ChatView: View {
   }
   
   private var mainWindowWithSidebar: some View {
-    HSplitView {
-      if showSidebar {
-        sidebarView
-      }
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+      // Sidebar column
+      sidebarView
+        .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 320)
+    } detail: {
+      // Detail column (chat content)
       chatContent
     }
+    .navigationSplitViewStyle(.balanced)
     .frame(
-      minWidth: showSidebar ? 800 : 600,
-      idealWidth: showSidebar ? 950 : 750,
+      minWidth: 800,
+      idealWidth: 950,
       maxWidth: .infinity,
       minHeight: session.turns.isEmpty ? 180 : 450,
       idealHeight: session.turns.isEmpty ? 220 : 580,
@@ -304,11 +307,10 @@ struct ChatView: View {
       },
       onToggleSidebar: {
         withAnimation {
-          showSidebar.toggle()
+          columnVisibility = columnVisibility == .all ? .detailOnly : .all
         }
       }
     )
-    .frame(minWidth: 260, maxWidth: 260)
   }
   
   // MARK: - Minimal Entry View (Floating Panel Empty State)
@@ -502,19 +504,19 @@ struct ChatView: View {
     VStack(spacing: 12) {
       // Top row: sidebar toggle, title, and buttons
       HStack(spacing: 12) {
-        // Sidebar toggle button (only for main window when sidebar is hidden)
-        if displayMode == .mainWindow && !showSidebar {
-          Button(action: { 
-            withAnimation {
-              showSidebar.toggle()
-            }
-          }) {
-            Image(systemName: "sidebar.left")
-              .foregroundColor(theme.secondaryText)
+      // Sidebar toggle button (only for main window when sidebar is hidden)
+      if displayMode == .mainWindow && columnVisibility == .detailOnly {
+        Button(action: { 
+          withAnimation {
+            columnVisibility = .all
           }
-          .buttonStyle(.plain)
-          .help("Show Sidebar")
+        }) {
+          Image(systemName: "sidebar.left")
+            .foregroundColor(theme.secondaryText)
         }
+        .buttonStyle(.plain)
+        .help("Show Sidebar")
+      }
         
         Spacer()
         
