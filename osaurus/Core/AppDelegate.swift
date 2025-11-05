@@ -33,7 +33,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverD
     NSApp.setActivationPolicy(.accessory)
 
     // App has launched
-    print("Osaurus server app launched")
 
     // Set up observers for server state changes
     setupObservers()
@@ -111,7 +110,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverD
   }
 
   func applicationWillTerminate(_ notification: Notification) {
-    print("Osaurus server app terminating")
     SharedConfigurationService.shared.remove()
   }
 
@@ -515,13 +513,12 @@ extension AppDelegate {
     )
     
     window.title = "Osaurus Chat"
-    window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
-    window.isMovableByWindowBackground = false
-    window.isOpaque = true
-    window.backgroundColor = NSColor.windowBackgroundColor
+    // Apple Liquid Glass title bar style - translucent title bar with vibrancy
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = true
     
-    // Add unified toolbar for modern macOS app look (like VS Code, Claude Desktop)
+    // Add unified toolbar for modern macOS app look with Liquid Glass aesthetic
     let toolbar = NSToolbar()
     toolbar.displayMode = .iconOnly
     window.toolbar = toolbar
@@ -592,13 +589,12 @@ extension AppDelegate {
     )
     
     window.title = "Osaurus Chat"
-    window.titleVisibility = .visible
-    window.titlebarAppearsTransparent = false
-    window.isMovableByWindowBackground = false
-    window.isOpaque = true
-    window.backgroundColor = NSColor.windowBackgroundColor
+    // Apple Liquid Glass title bar style - translucent title bar with vibrancy
+    window.titleVisibility = .hidden
+    window.titlebarAppearsTransparent = true
+    window.isMovableByWindowBackground = true
     
-    // Add toolbar
+    // Add toolbar with Liquid Glass aesthetic
     let toolbar = NSToolbar()
     toolbar.displayMode = .iconOnly
     window.toolbar = toolbar

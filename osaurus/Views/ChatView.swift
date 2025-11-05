@@ -24,7 +24,9 @@ final class ChatSession: ObservableObject {
   @Published var selectedModel: String? = nil
   @Published var modelOptions: [String] = []
   @Published var scrollTick: Int = 0
+  @Published var attachments: [Attachment] = []
   private var currentTask: Task<Void, Never>?
+  private var currentAttachments: [Attachment] = []
 
   init(initialConversation: [(role: MessageRole, content: String)] = []) {
     // Set initial conversation if provided
@@ -54,21 +56,40 @@ final class ChatSession: ObservableObject {
             }
           }
         } catch {
-          print("[ChatSession] Failed to fetch OpenCode models: \(error)")
         }
       }
     }
 
     modelOptions = opts
-    // Set default selectedModel to first available
+    // Set default selectedModel to Claude Sonnet 4.5 if available, otherwise first available
     selectedModel = opts.first
+    
+    // Check if OpenCode Claude Sonnet 4.5 becomes available
+    Task {
+      do {
+        let models = try await opencode.getAvailableModels()
+        await MainActor.run {
+          // Find Claude Sonnet 4.5 and set as default
+          for (provider, model, _) in models {
+            let modelName = "\(provider):\(model)"
+            if modelName.contains("claude-sonnet-4.5") {
+              self.selectedModel = modelName
+              break
+            }
+          }
+        }
+      } catch {
+      }
+    }
   }
 
   func sendCurrent() {
     guard !isStreaming else { return }
     let text = input
+    let currentAttachments = attachments
     input = ""
-    send(text)
+    attachments = []  // Clear attachments after capturing
+    send(text, attachments: currentAttachments)
   }
 
   func stop() {
@@ -82,11 +103,31 @@ final class ChatSession: ObservableObject {
     input = ""
   }
 
-  func send(_ text: String) {
+  func send(_ text: String, attachments: [Attachment] = []) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    turns.append((.user, trimmed))
+    
+    
+    // Allow sending if there's text OR attachments
+    guard !trimmed.isEmpty || !attachments.isEmpty else {
+      return
+    }
+    
+    // For now, store attachment info in the content string
+    // TODO: Refactor to store multimodal content properly
+    var content = trimmed
+    if !attachments.isEmpty {
+      for (index, attachment) in attachments.enumerated() {
+      }
+      let attachmentInfo = attachments.map { "📎 \($0.fileName)" }.joined(separator: "\n")
+      content = content.isEmpty ? attachmentInfo : "\(content)\n\(attachmentInfo)"
+    }
+    
+    turns.append((.user, content))
+    
+    // Store attachments temporarily for the streaming call
+    currentAttachments = attachments
     streamResponse()
+    // Note: Don't clear currentAttachments here - it will be cleared after Task starts
   }
   
   // Stream response for existing conversation (don't add user message again)
@@ -102,6 +143,10 @@ final class ChatSession: ObservableObject {
     let prompt = PromptBuilder.buildPrompt(from: messages)
 
     currentTask = Task { @MainActor in
+      // Capture attachments at the start of Task, then clear
+      let capturedAttachments = currentAttachments
+      currentAttachments = []
+      
       isStreaming = true
       ServerController.signalGenerationStart()
       defer {
@@ -128,15 +173,43 @@ final class ChatSession: ObservableObject {
         let idx = turns.count - 1
         let params = GenerationParameters(temperature: 0.7, maxTokens: 1024)
         do {
-          let stream = try await svc.streamDeltas(prompt: prompt, parameters: params)
+          // Check if we're using OpenCode with attachments (multimodal)
+          let stream: AsyncStream<String>
+          if let openCodeService = svc as? OpenCodeProxyService,
+             !capturedAttachments.isEmpty {
+            capturedAttachments.enumerated().forEach { index, attachment in
+            }
+            stream = try await openCodeService.streamDeltasWithAttachments(
+              prompt: prompt,
+              parameters: params,
+              attachments: capturedAttachments
+            )
+          } else {
+            // Standard text-only streaming
+            stream = try await svc.streamDeltas(prompt: prompt, parameters: params)
+          }
+          
+          var deltaCount = 0
+          var totalChars = 0
+          
           for await delta in stream {
-            if Task.isCancelled { break }
+            if Task.isCancelled {
+              break
+            }
             if !delta.isEmpty {
+              deltaCount += 1
+              totalChars += delta.count
               turns[idx].content += delta
               // Signal UI to autoscroll while streaming
               scrollTick &+= 1
+              
+              // Log every 10th delta or first/last
+              if deltaCount == 1 {
+              } else if deltaCount % 10 == 0 {
+              }
             }
           }
+          
         } catch {
           turns[idx].content = "Error: \(error.localizedDescription)"
         }
@@ -161,8 +234,9 @@ struct ChatView: View {
   @State private var focusTrigger: Int = 0
   @State private var isPinnedToBottom: Bool = true
   @State private var inputIsFocused: Bool = false
+  @State private var inputHeight: CGFloat = 36
   @State private var hostWindow: NSWindow?
-  @State private var showSidebar: Bool = true
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
   @State private var currentConversationId: UUID?
   @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
   @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
@@ -183,14 +257,11 @@ struct ChatView: View {
        let conversation = ConversationStore.shared.conversations.first(where: { $0.id == conversationId }) {
       initialMessages = conversation.messages
       self._currentConversationId = State(initialValue: conversationId)
-      print("🔵 [MainWindow Init] Loaded conversation ID: \(conversationId) with \(initialMessages.count) messages")
       for (index, msg) in initialMessages.enumerated() {
-        print("   Message \(index + 1): \(msg.role) - \(msg.content.prefix(50))...")
       }
     } else {
       initialMessages = []
       self._currentConversationId = State(initialValue: nil)
-      print("🔵 [MainWindow Init] Starting with empty conversation")
     }
     
     self._session = StateObject(wrappedValue: ChatSession(initialConversation: initialMessages))
@@ -213,7 +284,6 @@ struct ChatView: View {
         if displayMode == .mainWindow,
            let lastMessage = session.turns.last,
            lastMessage.role == .user {
-          print("🔵 [MainWindow] Auto-streaming response for loaded conversation")
           // Stream response without re-adding the user message
           Task { @MainActor in
             // Give UI a moment to render
@@ -237,15 +307,31 @@ struct ChatView: View {
   }
   
   private var mainWindowWithSidebar: some View {
-    HSplitView {
-      if showSidebar {
-        sidebarView
-      }
+    NavigationSplitView(columnVisibility: $columnVisibility) {
+      // Sidebar column
+      sidebarView
+        .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 320)
+    } detail: {
+      // Detail column (chat content)
       chatContent
+        .toolbar {
+          ToolbarItem(placement: .navigation) {
+            modelPicker
+          }
+          
+          ToolbarItem(placement: .automatic) {
+            Spacer()
+          }
+          
+          ToolbarItem(placement: .automatic) {
+            newChatButton
+          }
+        }
     }
+    .navigationSplitViewStyle(.balanced)
     .frame(
-      minWidth: showSidebar ? 800 : 600,
-      idealWidth: showSidebar ? 950 : 750,
+      minWidth: 800,
+      idealWidth: 950,
       maxWidth: .infinity,
       minHeight: session.turns.isEmpty ? 180 : 450,
       idealHeight: session.turns.isEmpty ? 220 : 580,
@@ -267,8 +353,8 @@ struct ChatView: View {
       minWidth: session.turns.isEmpty ? 500 : 700,
       idealWidth: session.turns.isEmpty ? 600 : 900,
       maxWidth: .infinity,
-      minHeight: session.turns.isEmpty ? 80 : 525,
-      idealHeight: session.turns.isEmpty ? 80 : 700,
+      minHeight: session.turns.isEmpty ? 140 : 525,
+      idealHeight: session.turns.isEmpty ? 140 : 700,
       maxHeight: .infinity
     )
   }
@@ -281,30 +367,31 @@ struct ChatView: View {
       },
       onNewChat: {
         createNewChat()
+      },
+      onToggleSidebar: {
+        withAnimation {
+          columnVisibility = columnVisibility == .all ? .detailOnly : .all
+        }
       }
     )
-    .frame(minWidth: 260, maxWidth: 260)
   }
   
   // MARK: - Minimal Entry View (Floating Panel Empty State)
   
   private var minimalEntryView: some View {
     ZStack {
-      // Glass background with animated glow
+      // Glass background with animated glow…
       GlassSurface(cornerRadius: 40)
-        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
-        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
-        .overlay(
-          // Subtle glowing border stroke
-          RoundedRectangle(cornerRadius: 40, style: .continuous)
-            .strokeBorder(
-              Color.blue.opacity(0.5),
-              lineWidth: 1.5
-            )
-            .blur(radius: 2)
-            .opacity(testAnimationOpacity)
-        )
-        .allowsHitTesting(false)
+//        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
+//        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
+//        .allowsHitTesting(false)
+        .onAppear {
+          // Breathing glow animation - only affects the glass surface shadows
+          withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+            testAnimationOpacity = 1.0
+            testAnimationScale = 1.05
+          }
+        }
       
       HStack(spacing: 12) {
         // Plus icon
@@ -343,25 +430,16 @@ struct ChatView: View {
       .padding(.horizontal, 24)
       .padding(.vertical, 18)
     }
-    .frame(height: 80)
+    .frame(height: 60) // Adjust this value to control initial input field height
     .padding(.horizontal, 40)
-    .onAppear {
-      // Breathing glow animation
-      withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-        testAnimationOpacity = 1.0
-        testAnimationScale = 1.05
-      }
-    }
   }
   
   private func handleMinimalEntrySend() {
     guard !session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     guard !isSendingMessage else {
-      print("⚠️ [FloatingPanel] Already sending message, ignoring duplicate call")
       return
     }
     guard !isExpandingToMainWindow else { 
-      print("⚠️ [FloatingPanel] Already expanding, ignoring send")
       return 
     }
     
@@ -378,16 +456,13 @@ struct ChatView: View {
       
       Task { @MainActor in
         guard !isExpandingToMainWindow else {
-          print("⚠️ [FloatingPanel] Already expanding, skipping")
           return
         }
         isExpandingToMainWindow = true
         
-        print("🟢 [FloatingPanel] Expanding immediately with user message: \(userMessage.prefix(50))")
         
         // Save conversation with just the user message (no assistant response yet)
         let conversationId = conversationStore.createConversation(messages: session.turns)
-        print("🟢 [FloatingPanel] Created conversation ID: \(conversationId)")
         
         // Trigger immediate morph animation to main window
         // Main window will load this conversation and automatically start streaming
@@ -423,7 +498,14 @@ struct ChatView: View {
         }
 
         VStack(spacing: 10) {
-          header(containerWidth)
+          // Only show header for floating panel, main window uses toolbar
+          if displayMode == .floatingPanel {
+            header(containerWidth)
+              .padding(.horizontal, 20)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity)
+          }
+          
           if hasAnyModel {
             if !session.turns.isEmpty {
               conversation(containerWidth)
@@ -435,13 +517,16 @@ struct ChatView: View {
             
             // Input bar at the bottom with integrated send button
             inputBarWithButton(containerWidth)
+              .padding(.horizontal, 20)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity)
           } else {
             emptyState
+              .padding(.horizontal, 20)
           }
         }
         .animation(.easeInOut(duration: 0.25), value: session.turns.isEmpty)
-        .padding(20)
-        .frame(maxWidth: 1000)
+        .padding(.vertical, 20)
         .frame(
           maxWidth: .infinity,
           maxHeight: session.turns.isEmpty ? .infinity : .infinity,
@@ -477,82 +562,43 @@ struct ChatView: View {
   }
 
   private func header(_ width: CGFloat) -> some View {
-    VStack(spacing: 12) {
-      // Top row: sidebar toggle, title, and buttons
-      HStack(spacing: 12) {
-        // Sidebar toggle button (only for main window)
-        if displayMode == .mainWindow {
-          Button(action: { 
-            withAnimation {
-              showSidebar.toggle()
-            }
-          }) {
-            Image(systemName: "sidebar.left")
-              .foregroundColor(theme.secondaryText)
-          }
-          .buttonStyle(.plain)
-          .help(showSidebar ? "Hide Sidebar" : "Show Sidebar")
-        }
-        
-        Spacer()
-        
-        if !session.turns.isEmpty {
-          Button(action: { 
-            if displayMode == .mainWindow {
-              // In main window, ask to save before resetting
-              createNewChat()
-            } else {
-              session.reset()
-            }
-          }) {
-            Image(systemName: displayMode == .mainWindow ? "plus" : "trash")
-              .foregroundColor(theme.secondaryText)
-          }
-          .buttonStyle(.plain)
-          .help(displayMode == .mainWindow ? "New Chat" : "Reset chat")
-        }
-        
-        // Show "Expand" button only in floating panel mode when conversation exists
-        if displayMode == .floatingPanel && !session.turns.isEmpty {
-          Button(action: { 
-            guard !isExpandingToMainWindow else {
-              print("⚠️ [FloatingPanel] Already expanding, ignoring button click")
-              return
-            }
-            isExpandingToMainWindow = true
-            
-            // Save conversation and pass ID to AppDelegate before expanding
-            let conversationId = conversationStore.createConversation(messages: session.turns)
-            print("🔵 [Expand Button] Created conversation with ID: \(conversationId)")
-            print("🔵 [Expand Button] Total conversations in store: \(conversationStore.conversations.count)")
-            AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
-          }) {
-            HStack(spacing: 4) {
-              Image(systemName: "arrow.up.left.and.arrow.down.right")
-              Text("Expand")
-            }
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(Color.accentColor)
-          }
-          .buttonStyle(.plain)
-          .padding(.horizontal, 10)
-          .padding(.vertical, 6)
-          .background(
-            Capsule()
-              .fill(Color.accentColor.opacity(0.1))
-              .overlay(
-                Capsule()
-                  .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
-              )
-          )
-          .help("Expand to main window")
-        }
-      }
+    HStack(spacing: 12) {
+      // Model picker in title bar area
+      modelPicker
       
-      // Second row: Model selector
-      HStack(spacing: 12) {
-        modelPicker
-        Spacer()
+      Spacer()
+      
+      // Show "Expand" button only in floating panel mode when conversation exists
+      if displayMode == .floatingPanel && !session.turns.isEmpty {
+        Button(action: { 
+          guard !isExpandingToMainWindow else {
+            return
+          }
+          isExpandingToMainWindow = true
+          
+          // Save conversation and pass ID to AppDelegate before expanding
+          let conversationId = conversationStore.createConversation(messages: session.turns)
+          AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
+        }) {
+          HStack(spacing: 4) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+            Text("Expand")
+          }
+          .font(.system(size: 13, weight: .medium))
+          .foregroundColor(Color.accentColor)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+          Capsule()
+            .fill(Color.accentColor.opacity(0.1))
+            .overlay(
+              Capsule()
+                .strokeBorder(Color.accentColor.opacity(0.3), lineWidth: 1)
+            )
+        )
+        .help("Expand to main window")
       }
     }
   }
@@ -578,7 +624,7 @@ struct ChatView: View {
               endPoint: .bottomTrailing
             )
           )
-          .frame(width: 28, height: 28)
+          .frame(width: 24, height: 24)
           .overlay(
             Circle()
               .fill(
@@ -586,16 +632,16 @@ struct ChatView: View {
                   colors: [Color.white.opacity(0.3), Color.clear],
                   center: .topLeading,
                   startRadius: 0,
-                  endRadius: 20
+                  endRadius: 16
                 )
               )
           )
         
         Image(systemName: "sparkles")
-          .font(.system(size: 13, weight: .semibold))
+          .font(.system(size: 11, weight: .semibold))
           .foregroundColor(.white)
       }
-      .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
+      .shadow(color: Color.blue.opacity(0.3), radius: 3, x: 0, y: 1.5)
       
       // Model name and picker
       if session.modelOptions.count > 1 {
@@ -632,8 +678,8 @@ struct ChatView: View {
         }
       }
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 8)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 4)
     .background(
       ZStack {
         // Liquid glass effect base
@@ -658,18 +704,38 @@ struct ChatView: View {
           .strokeBorder(
             LinearGradient(
               colors: [
-                Color.white.opacity(0.2),
+                Color.white.opacity(0.06),
                 Color.white.opacity(0.05)
               ],
               startPoint: .topLeading,
               endPoint: .bottomTrailing
             ),
-            lineWidth: 0.5
+            lineWidth: 0.01
           )
       }
     )
     .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 4)
     .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+  }
+  
+  // MARK: - New Chat Button
+  
+  private var newChatButton: some View {
+    Button(action: {
+      createNewChat()
+    }) {
+      ZStack {
+        Circle()
+          .fill(theme.secondaryBackground.opacity(0.5))
+          .frame(width: 28, height: 28)
+        
+        Image(systemName: "plus")
+          .font(.system(size: 14, weight: .medium))
+          .foregroundColor(theme.primaryText)
+      }
+    }
+    .buttonStyle(.borderless)
+    .help("New Chat")
   }
 
   private func conversation(_ width: CGFloat) -> some View {
@@ -681,16 +747,24 @@ struct ChatView: View {
             ForEach(Array(session.turns.enumerated()), id: \.offset) { item in
               let turn = item.element
               HStack(alignment: .top, spacing: 12) {
+                // Avatar
                 if turn.role == .user {
-                  Spacer()
+                  Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                      Text("Y")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                    )
+                } else {
+                  Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(theme.secondaryText)
+                    .frame(width: 32, height: 32)
                 }
 
-                VStack(alignment: turn.role == .user ? .trailing : .leading, spacing: 6) {
-                  Text(turn.role == .user ? "You" : "Assistant")
-                    .font(Typography.small(width))
-                    .fontWeight(.medium)
-                    .foregroundColor(turn.role == .user ? Color.accentColor : theme.secondaryText)
-
+                VStack(alignment: .leading, spacing: 6) {
                   ZStack(alignment: .topTrailing) {
                     Group {
                       if turn.content.isEmpty && turn.role == .assistant && session.isStreaming {
@@ -703,16 +777,16 @@ struct ChatView: View {
                             .foregroundColor(theme.primaryText)
                         }
                         .padding(12)
-                        .background(
-                          GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
-                        )
                       } else {
                         MarkdownMessageView(text: turn.content, baseWidth: width)
                           .font(Typography.body(width))
                           .foregroundColor(theme.primaryText)
-                          .padding(12)
+                          .padding(turn.role == .user ? 12 : 0)
                           .background(
-                            GlassMessageBubble(role: turn.role, isStreaming: session.isStreaming)
+                            turn.role == .user ? 
+                              AnyView(RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.15))) : 
+                              AnyView(Color.clear)
                           )
                           .transition(.opacity.combined(with: .scale(scale: 0.95)))
                       }
@@ -726,20 +800,17 @@ struct ChatView: View {
                           .foregroundColor(theme.tertiaryText)
                       }
                       .padding(8)
-                      .offset(x: -8, y: 8)
+                      .offset(x: 8, y: -8)
                     }
                   }
                 }
-                .frame(
-                  maxWidth: min(width * 0.70, 500),
-                  alignment: turn.role == .user ? .trailing : .leading
-                )
-
-                if turn.role == .assistant {
-                  Spacer()
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Spacer(minLength: 0)
               }
-              .frame(maxWidth: .infinity)
+              .frame(maxWidth: 1000)
+              .frame(maxWidth: .infinity, alignment: .center)
+              .padding(.horizontal, 20)
             }
             Color.clear
               .frame(height: 1)
@@ -747,12 +818,19 @@ struct ChatView: View {
               .onAppear { isPinnedToBottom = true }
               .onDisappear { isPinnedToBottom = false }
           }
-          .padding(.horizontal, 12)
           .padding(.vertical, 6)
           .frame(maxWidth: .infinity)
         }
         .scrollContentBackground(.hidden)
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible, axes: .vertical)
+        .onAppear {
+          // Make scrollbar subtle after a brief delay to ensure view is loaded
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+              findAndStyleScrollViews(in: window.contentView)
+            }
+          }
+        }
 
         if !isPinnedToBottom && !session.turns.isEmpty {
           Button(action: {
@@ -801,122 +879,110 @@ struct ChatView: View {
   }
 
   private func inputBarWithButton(_ width: CGFloat) -> some View {
-    HStack(alignment: .bottom, spacing: 12) {
-      // Input field
-      ZStack(alignment: .topLeading) {
-        GlassInputFieldBridge(
+    VStack(spacing: 0) {
+      // Attachments container (shown only when there are attachments)
+      if !session.attachments.isEmpty {
+        AttachmentsContainer(
+          attachments: session.attachments,
+          onRemove: { attachment in
+            withAnimation(.easeInOut(duration: 0.2)) {
+              session.attachments.removeAll { $0.id == attachment.id }
+            }
+          }
+        )
+        .transition(.move(edge: .top).combined(with: .opacity))
+      }
+      
+      HStack(alignment: .bottom, spacing: 12) {
+        // Input field
+        ChatInputContainer(
           text: $session.input,
-          isFocused: inputIsFocused,
+          measuredHeight: $inputHeight,
+          isFocused: $inputIsFocused,
           onCommit: { session.sendCurrent() },
           onFocusChange: { focused in inputIsFocused = focused }
         )
-        .frame(minHeight: 48, maxHeight: 120)
-        .background(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(
-              theme.glassOpacityTertiary == 0.05
-                ? theme.secondaryBackground.opacity(0.4) : theme.primaryBackground.opacity(0.4)
-            )
-            .background(
-              RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-            )
-        )
-        .overlay(
-          RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(
-              inputIsFocused
-                ? LinearGradient(
-                  colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.3)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                )
-                : LinearGradient(
-                  colors: [theme.glassEdgeLight, theme.glassEdgeLight.opacity(0.3)],
-                  startPoint: .topLeading,
-                  endPoint: .bottomTrailing
-                ),
-              lineWidth: inputIsFocused ? 1.5 : 0.5
-            )
-        )
-        .shadow(
-          color: inputIsFocused ? Color.accentColor.opacity(0.2) : Color.clear,
-          radius: inputIsFocused ? 20 : 0
-        )
-        .animation(.easeInOut(duration: theme.animationDurationMedium), value: inputIsFocused)
-
-        if session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-          Text("Type your message…")
-            .font(.system(size: 15))
-            .foregroundColor(theme.tertiaryText)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
-            .allowsHitTesting(false)
-        }
+        .frame(height: inputHeight)
+        .animation(.easeInOut(duration: 0.2), value: inputHeight)
+        
+        // Attachment button
+        attachmentButton
+        
+        // Send/Stop button
+        primaryActionButton
       }
-      
-      // Send/Stop button
-      primaryActionButton
     }
   }
 
   private var primaryActionButton: some View {
     Group {
       if session.isStreaming {
+        // Stop button - circular
         Button(action: { session.stop() }) {
-          HStack(spacing: 6) {
-            Image(systemName: "stop.fill")
-            Text("Stop")
-          }
+          Image(systemName: "stop.fill")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color.red.opacity(0.9)))
+            .contentShape(Circle())
         }
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-          Capsule()
-            .fill(Color.red.opacity(0.9))
-        )
-        .shadow(
-          color: Color.red.opacity(0.3),
-          radius: 8,
-          x: 0,
-          y: 2
-        )
         .buttonStyle(.plain)
+        .shadow(color: Color.red.opacity(0.3), radius: 8, x: 0, y: 2)
         .help("Stop response")
       } else {
+        // Send button - circular with arrow.up
         Button(action: { session.sendCurrent() }) {
-          HStack(spacing: 6) {
-            Image(systemName: "paperplane.fill")
-            Text("Send")
-          }
+          Image(systemName: "arrow.up")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color.accentColor.opacity(0.9)))
+            .contentShape(Circle())
         }
-        .font(.system(size: 14, weight: .medium))
-        .foregroundColor(.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-          Capsule()
-            .fill(Color.accentColor.opacity(0.9))
-        )
+        .buttonStyle(.plain)
+        .disabled(session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .opacity(session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.4 : 1)
         .shadow(
-          color: Color.accentColor.opacity(0.3),
+          color: session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty 
+            ? Color.clear 
+            : Color.accentColor.opacity(0.3),
           radius: 8,
           x: 0,
           y: 2
-        )
-        .buttonStyle(.plain)
-        .disabled(
-          session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        )
-        .opacity(
-          session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1
         )
         .animation(.easeInOut(duration: theme.animationDurationQuick), value: session.input)
         .keyboardShortcut(.return, modifiers: [.command])
+        .help("Send message")
       }
     }
+  }
+  
+  // Attachment button
+  private var attachmentButton: some View {
+    Button(action: { 
+      Task {
+        do {
+          if let attachment = try await AttachmentService.pickImage() {
+            withAnimation(.easeInOut(duration: 0.2)) {
+              session.attachments.append(attachment)
+            }
+          }
+        } catch let error as AttachmentError {
+          // Show error to user
+          // TODO: Show user-facing error alert
+        } catch {
+        }
+      }
+    }) {
+      Image(systemName: "paperclip")
+        .font(.system(size: 16, weight: .semibold))
+        .foregroundColor(theme.secondaryText)
+        .frame(width: 36, height: 36)
+        .background(Circle().fill(theme.secondaryBackground))
+        .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .help("Attach image (.jpg, .png, .webp, max 5MB)")
   }
 
   private var sendButton: some View {
@@ -1024,15 +1090,11 @@ struct ChatView: View {
     
     if let id = currentConversationId {
       // Update existing conversation
-      print("🟡 [MainWindow Save] Updating conversation ID: \(id)")
       conversationStore.updateConversation(id, messages: session.turns)
-      print("🟡 [MainWindow Save] Total conversations in store: \(conversationStore.conversations.count)")
     } else {
       // Create new conversation
-      print("🔴 [MainWindow Save] Creating NEW conversation (currentConversationId was nil!)")
       let newId = conversationStore.createConversation(messages: session.turns)
       currentConversationId = newId
-      print("🔴 [MainWindow Save] Created with ID: \(newId), Total: \(conversationStore.conversations.count)")
     }
   }
 }
@@ -1294,6 +1356,26 @@ struct HoveringIcon: View {
       isHovered = hovering
     }
     .help(help)
+  }
+}
+
+// MARK: - ScrollView Styling Helper
+func findAndStyleScrollViews(in view: NSView?) {
+  guard let view = view else { return }
+  
+  if let scrollView = view as? NSScrollView {
+    scrollView.scrollerStyle = .overlay
+    scrollView.hasVerticalScroller = true
+    scrollView.autohidesScrollers = true
+    
+    if let scroller = scrollView.verticalScroller {
+      scroller.alphaValue = 0.4
+      scroller.knobStyle = .light
+    }
+  }
+  
+  for subview in view.subviews {
+    findAndStyleScrollViews(in: subview)
   }
 }
 

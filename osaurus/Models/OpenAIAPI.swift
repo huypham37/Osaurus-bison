@@ -41,22 +41,175 @@ struct ModelsResponse: Codable {
   let data: [OpenAIModel]
 }
 
-/// Chat message in OpenAI format
+// MARK: - Multimodal Content Support
+
+/// Content part for multimodal messages (text or image)
+enum ContentPart: Codable {
+  case text(String)
+  case imageURL(ImageURL)
+  
+  struct ImageURL: Codable {
+    let url: String  // Can be a URL or data URI (data:image/jpeg;base64,...)
+    let detail: String?  // "auto", "low", or "high" for vision models
+    
+    enum CodingKeys: String, CodingKey {
+      case url
+      case detail
+    }
+  }
+  
+  enum CodingKeys: String, CodingKey {
+    case type
+    case text
+    case image_url
+  }
+  
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    let type = try container.decode(String.self, forKey: .type)
+    
+    switch type {
+    case "text":
+      let text = try container.decode(String.self, forKey: .text)
+      self = .text(text)
+    case "image_url":
+      let imageURL = try container.decode(ImageURL.self, forKey: .image_url)
+      self = .imageURL(imageURL)
+    default:
+      throw DecodingError.dataCorruptedError(
+        forKey: .type,
+        in: container,
+        debugDescription: "Unknown content part type: \(type)"
+      )
+    }
+  }
+  
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    
+    switch self {
+    case .text(let text):
+      try container.encode("text", forKey: .type)
+      try container.encode(text, forKey: .text)
+    case .imageURL(let imageURL):
+      try container.encode("image_url", forKey: .type)
+      try container.encode(imageURL, forKey: .image_url)
+    }
+  }
+}
+
+/// Chat message in OpenAI format (supports both legacy string and multimodal array content)
 struct ChatMessage: Codable {
   let role: String
-  let content: String?
+  
+  // Legacy support: content as string
+  private let contentString: String?
+  
+  // Multimodal support: content as array of parts
+  private let contentArray: [ContentPart]?
+  
   /// Present when assistant requests tool invocations
   let tool_calls: [ToolCall]?
   /// Required for role=="tool" messages to associate with a prior tool call
   let tool_call_id: String?
-}
-
-extension ChatMessage {
+  
+  // Computed property to access content uniformly
+  var content: String? {
+    if let contentString = contentString {
+      return contentString
+    }
+    // Extract text from content array
+    if let contentArray = contentArray {
+      return contentArray.compactMap { part in
+        if case .text(let text) = part {
+          return text
+        }
+        return nil
+      }.joined(separator: "\n")
+    }
+    return nil
+  }
+  
+  var contentParts: [ContentPart]? {
+    if let contentArray = contentArray {
+      return contentArray
+    }
+    // Convert string to array format
+    if let contentString = contentString {
+      return [.text(contentString)]
+    }
+    return nil
+  }
+  
+  enum CodingKeys: String, CodingKey {
+    case role
+    case content
+    case tool_calls
+    case tool_call_id
+  }
+  
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    role = try container.decode(String.self, forKey: .role)
+    tool_calls = try container.decodeIfPresent([ToolCall].self, forKey: .tool_calls)
+    tool_call_id = try container.decodeIfPresent(String.self, forKey: .tool_call_id)
+    
+    // Try to decode content as array first, fallback to string
+    if let array = try? container.decode([ContentPart].self, forKey: .content) {
+      contentArray = array
+      contentString = nil
+    } else {
+      contentString = try container.decodeIfPresent(String.self, forKey: .content)
+      contentArray = nil
+    }
+  }
+  
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(role, forKey: .role)
+    
+    // Encode content in original format
+    if let contentArray = contentArray {
+      try container.encode(contentArray, forKey: .content)
+    } else if let contentString = contentString {
+      try container.encode(contentString, forKey: .content)
+    }
+    
+    try container.encodeIfPresent(tool_calls, forKey: .tool_calls)
+    try container.encodeIfPresent(tool_call_id, forKey: .tool_call_id)
+  }
+  
+  // Legacy text-only init
   init(role: String, content: String) {
     self.role = role
-    self.content = content
+    self.contentString = content
+    self.contentArray = nil
     self.tool_calls = nil
     self.tool_call_id = nil
+  }
+  
+  // Multimodal init
+  init(role: String, contentParts: [ContentPart]) {
+    self.role = role
+    self.contentString = nil
+    self.contentArray = contentParts
+    self.tool_calls = nil
+    self.tool_call_id = nil
+  }
+  
+  // Full init for tool calls
+  init(
+    role: String,
+    content: String? = nil,
+    contentParts: [ContentPart]? = nil,
+    tool_calls: [ToolCall]? = nil,
+    tool_call_id: String? = nil
+  ) {
+    self.role = role
+    self.contentString = content
+    self.contentArray = contentParts
+    self.tool_calls = tool_calls
+    self.tool_call_id = tool_call_id
   }
 }
 

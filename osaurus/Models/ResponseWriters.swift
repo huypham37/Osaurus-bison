@@ -116,7 +116,6 @@ final class SSEResponseWriter: ResponseWriter {
       context.flush()
     } catch {
       // Log encoding error and close connection gracefully
-      print("Error encoding SSE chunk: \(error)")
       context.close(promise: nil)
     }
   }

@@ -98,7 +98,6 @@ final class ServerController: ObservableObject {
       self.localNetworkAddress =
         configuration.exposeToNetwork ? self.getLocalIPAddress() : "127.0.0.1"
 
-      print("[Osaurus] Starting NIO server on \(bindHost):\(configuration.port)")
 
       // Ensure any previous instance is shut down
       try await stopServerIfNeeded()
@@ -122,7 +121,6 @@ final class ServerController: ObservableObject {
       isRunning = true
       serverHealth = .running
       lastErrorMessage = nil
-      print("[Osaurus] NIO server started successfully on port \(configuration.port)")
 
       // Handle channel closure
       setupChannelClosureHandler(channel)
@@ -148,14 +146,12 @@ final class ServerController: ObservableObject {
     // If nothing to stop, return
     guard serverChannel != nil || eventLoopGroup != nil else { return }
     if !isRestarting { serverHealth = .stopping }
-    print("[Osaurus] Stopping NIO server...")
 
     isRunning = false
 
     // Close the server channel if present
     if let channel = serverChannel {
       do { try await channel.close().get() } catch {
-        print("[Osaurus] Error closing channel: \(error)")
       }
       serverChannel = nil
     }
@@ -164,20 +160,17 @@ final class ServerController: ObservableObject {
     await cleanupRuntime()
 
     if !isRestarting { serverHealth = .stopped }
-    print("[Osaurus] Server stopped successfully")
   }
 
   /// Ensures the server is properly shut down before app termination
   func ensureShutdown() async {
     guard serverChannel != nil || eventLoopGroup != nil else { return }
 
-    print("[Osaurus] Ensuring NIO server shutdown before app termination")
     isRunning = false
     serverHealth = .stopping
 
     if let channel = serverChannel {
       do { try await channel.close().get() } catch {
-        print("[Osaurus] Error closing channel: \(error)")
       }
       serverChannel = nil
     }
@@ -185,7 +178,6 @@ final class ServerController: ObservableObject {
     localNetworkAddress = "127.0.0.1"
     await cleanupRuntime()
 
-    print("[Osaurus] Server shutdown completed")
   }
 
   // Capture singleton pointer on init attach to UI
@@ -206,7 +198,6 @@ final class ServerController: ObservableObject {
       let (_, response) = try await URLSession.shared.data(from: url)
       return (response as? HTTPURLResponse)?.statusCode == 200
     } catch {
-      print("[Osaurus] Health check failed: \(error)")
       return false
     }
   }
@@ -259,7 +250,6 @@ final class ServerController: ObservableObject {
 
   /// Handles server startup errors
   private func handleServerError(_ error: Error) {
-    print("[Osaurus] Failed to start server: \(error)")
     isRunning = false
     let desc = error.localizedDescription.lowercased()
     if desc.contains("address already in use") || desc.contains("eaddrinuse") {
@@ -409,7 +399,6 @@ final class ServerController: ObservableObject {
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         group.shutdownGracefully { error in
           if let error {
-            print("[Osaurus] Error shutting down EventLoopGroup: \(error)")
           }
           continuation.resume()
         }

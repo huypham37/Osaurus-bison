@@ -20,7 +20,6 @@ enum ServerConfigurationStore {
       let decoder = JSONDecoder()
       return try decoder.decode(ServerConfiguration.self, from: data)
     } catch {
-      print("[Osaurus] Failed to load ServerConfiguration: \(error)")
       return nil
     }
   }
@@ -34,7 +33,6 @@ enum ServerConfigurationStore {
       let data = try encoder.encode(configuration)
       try data.write(to: url, options: [.atomic])
     } catch {
-      print("[Osaurus] Failed to save ServerConfiguration: \(error)")
     }
   }
 

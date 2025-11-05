@@ -175,16 +175,12 @@ final class MLXService: @unchecked Sendable {
     }()
     guard let model = chosen else {
       if let requested = modelName {
-        print("[Osaurus] Warm-up skipped: requested model not found: \(requested)")
         DebugLog.log("WARMUP", "Requested warm-up model not found: \(requested)")
       } else {
         let available = Self.getAvailableModels()
         if available.isEmpty {
-          print("[Osaurus] Warm-up skipped: no available models found on disk")
           DebugLog.log("WARMUP", "No available models found during warm-up")
         } else {
-          print(
-            "[Osaurus] Warm-up skipped: unable to select a model (\(available.count) available)")
           DebugLog.log(
             "WARMUP", "Unable to select a warm-up model from available list: \(available)")
         }
@@ -194,7 +190,6 @@ final class MLXService: @unchecked Sendable {
 
     // Validate model files are present before attempting warm-up
     guard Self.findLocalDirectory(forModelId: model.modelId) != nil else {
-      print("[Osaurus] Warm-up skipped: model not downloaded locally: \(model.name)")
       DebugLog.log("WARMUP", "Model not downloaded for warm-up: \(model.name)")
       return
     }
@@ -215,7 +210,6 @@ final class MLXService: @unchecked Sendable {
       for await _ in stream { /* no-op */  }
     } catch {
       // Non-fatal: warm-up is best effort, but log for visibility
-      print("[Osaurus] Warm-up failed for model \(model.name): \(error)")
       DebugLog.log(
         "WARMUP", "Warm-up failed for model=\(model.name): \(error.localizedDescription)")
     }
