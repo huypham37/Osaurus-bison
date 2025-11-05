@@ -68,72 +68,53 @@ final class AttachmentService {
   /// - Parameter url: File URL of the image
   /// - Returns: Processed attachment
   static func processImage(url: URL) async throws -> Attachment {
-    print("[AttachmentService] ═══════════════════════════════════════")
-    print("[AttachmentService] Processing image: \(url.lastPathComponent)")
     
     // Validate file format
     let fileExtension = url.pathExtension.lowercased()
-    print("[AttachmentService] File extension: \(fileExtension)")
     
     guard let format = AttachmentFormat.from(extension: fileExtension) else {
-      print("[AttachmentService] ✗ Unsupported format: \(fileExtension)")
       throw AttachmentError.unsupportedFormat(fileExtension)
     }
     
-    print("[AttachmentService] Format: \(format), MIME: \(format.mimeType)")
     
     // Check file size
     let fileSize = try getFileSize(url: url)
-    print("[AttachmentService] Original file size: \(fileSize) bytes (\(ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)))")
     
     guard fileSize <= maxFileSize else {
-      print("[AttachmentService] ✗ File too large: \(fileSize) > \(maxFileSize)")
       throw AttachmentError.fileTooLarge(fileSize, max: maxFileSize)
     }
     
     // Load image data
     guard let imageData = try? Data(contentsOf: url) else {
-      print("[AttachmentService] ✗ Cannot read file")
       throw AttachmentError.cannotReadFile
     }
     
     guard let image = NSImage(data: imageData) else {
-      print("[AttachmentService] ✗ Invalid image data")
       throw AttachmentError.invalidImageData
     }
     
-    print("[AttachmentService] Image dimensions: \(image.size.width) × \(image.size.height)")
     
     // Compress if needed
     let processedData: Data
     let needsCompression = fileSize > maxFileSize / 2 || needsResizing(image: image)
-    print("[AttachmentService] Needs compression/resize: \(needsCompression)")
     
     if needsCompression {
       processedData = try compressImage(image: image, format: format)
-      print("[AttachmentService] Compressed size: \(processedData.count) bytes (\(ByteCountFormatter.string(fromByteCount: Int64(processedData.count), countStyle: .file)))")
     } else {
       processedData = imageData
-      print("[AttachmentService] Using original data (no compression needed)")
     }
     
     // Encode to base64
     let base64String = processedData.base64EncodedString()
-    print("[AttachmentService] Base64 string length: \(base64String.count) characters")
-    print("[AttachmentService] Base64 prefix (50 chars): \(String(base64String.prefix(50)))...")
     
     // Verify base64 encoding
     if base64String.isEmpty {
-      print("[AttachmentService] ✗ WARNING: Base64 string is empty!")
     } else if !base64String.allSatisfy({ $0.isASCII }) {
-      print("[AttachmentService] ✗ WARNING: Base64 contains non-ASCII characters!")
     } else {
-      print("[AttachmentService] ✓ Base64 encoding looks valid")
     }
     
     // Generate thumbnail
     let thumbnail = generateThumbnail(image: image)
-    print("[AttachmentService] Thumbnail generated: \(thumbnail != nil ? "✓" : "✗")")
     
     let attachment = Attachment(
       fileURL: url,
@@ -143,8 +124,6 @@ final class AttachmentService {
       fileSize: processedData.count
     )
     
-    print("[AttachmentService] ✓ Attachment created successfully")
-    print("[AttachmentService] ═══════════════════════════════════════")
     
     return attachment
   }

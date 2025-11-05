@@ -50,7 +50,6 @@ final class SharedConfigurationService {
       try FileManager.default.createDirectory(at: instance, withIntermediateDirectories: true)
       return instance
     } catch {
-      print("[Osaurus] SharedConfigurationService: failed to create directories: \(error)")
       return nil
     }
   }
@@ -80,7 +79,6 @@ final class SharedConfigurationService {
         _ = try? FileManager.default.setAttributes(
           [.modificationDate: Date()], ofItemAtPath: instanceDir.path)
       } catch {
-        print("[Osaurus] SharedConfigurationService: failed to write configuration: \(error)")
       }
     case .starting:
       // Publish minimal metadata while starting
@@ -94,8 +92,6 @@ final class SharedConfigurationService {
           withJSONObject: values, options: [.prettyPrinted, .sortedKeys])
         try jsonData.write(to: fileURL, options: [.atomic])
       } catch {
-        print(
-          "[Osaurus] SharedConfigurationService: failed to write starting configuration: \(error)")
       }
     case .restarting:
       // Publish minimal metadata while restarting
@@ -109,8 +105,6 @@ final class SharedConfigurationService {
           withJSONObject: values, options: [.prettyPrinted, .sortedKeys])
         try jsonData.write(to: fileURL, options: [.atomic])
       } catch {
-        print(
-          "[Osaurus] SharedConfigurationService: failed to write restarting configuration: \(error)"
         )
       }
     case .stopped, .stopping, .error:
@@ -125,11 +119,8 @@ final class SharedConfigurationService {
     do {
       if FileManager.default.fileExists(atPath: instance.path) {
         try FileManager.default.removeItem(at: instance)
-        print(
-          "[Osaurus] SharedConfigurationService: removed instance directory at \(instance.path)")
       }
     } catch {
-      print("[Osaurus] SharedConfigurationService: failed to remove instance directory: \(error)")
     }
   }
 }

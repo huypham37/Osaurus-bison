@@ -95,7 +95,7 @@ struct ChatInputContainer_Previews: PreviewProvider {
         text: $text,
         measuredHeight: $measuredHeight,
         isFocused: $isFocused,
-        onCommit: { print("Commit") },
+        onCommit: { },
         onFocusChange: { focused in isFocused = focused }
       )
       .frame(height: measuredHeight)

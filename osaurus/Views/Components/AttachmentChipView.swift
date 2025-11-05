@@ -115,13 +115,13 @@ struct AttachmentsContainer: View {
   return VStack(spacing: 20) {
     AttachmentChipView(
       attachment: sampleAttachment,
-      onRemove: { print("Remove tapped") }
+      onRemove: { }
     )
     .frame(width: 280)
     
     AttachmentsContainer(
       attachments: [sampleAttachment, sampleAttachment],
-      onRemove: { _ in print("Remove from container") }
+      onRemove: { _ in }
     )
     .frame(width: 600)
   }

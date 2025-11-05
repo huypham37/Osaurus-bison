@@ -56,7 +56,6 @@ final class ChatSession: ObservableObject {
             }
           }
         } catch {
-          print("[ChatSession] Failed to fetch OpenCode models: \(error)")
         }
       }
     }
@@ -75,13 +74,11 @@ final class ChatSession: ObservableObject {
             let modelName = "\(provider):\(model)"
             if modelName.contains("claude-sonnet-4.5") {
               self.selectedModel = modelName
-              print("[ChatSession] Set default model to: \(modelName)")
               break
             }
           }
         }
       } catch {
-        print("[ChatSession] Failed to set default model: \(error)")
       }
     }
   }
@@ -109,17 +106,9 @@ final class ChatSession: ObservableObject {
   func send(_ text: String, attachments: [Attachment] = []) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     
-    print("[ChatView] ╔══════════════════════════════════════════════════════════════")
-    print("[ChatView] ║ 🚀 USER MESSAGE SEND INITIATED")
-    print("[ChatView] ╠══════════════════════════════════════════════════════════════")
-    print("[ChatView] ║ Text length: \(trimmed.count) characters")
-    print("[ChatView] ║ Text preview: \(String(trimmed.prefix(100)))\(trimmed.count > 100 ? "..." : "")")
-    print("[ChatView] ║ Attachments: \(attachments.count)")
     
     // Allow sending if there's text OR attachments
     guard !trimmed.isEmpty || !attachments.isEmpty else {
-      print("[ChatView] ║ ⚠️  Blocked: Empty text and no attachments")
-      print("[ChatView] ╚══════════════════════════════════════════════════════════════")
       return
     }
     
@@ -128,22 +117,15 @@ final class ChatSession: ObservableObject {
     var content = trimmed
     if !attachments.isEmpty {
       for (index, attachment) in attachments.enumerated() {
-        print("[ChatView] ║ Attachment #\(index + 1):")
-        print("[ChatView] ║   - Filename: \(attachment.fileName)")
-        print("[ChatView] ║   - Size: \(attachment.formattedFileSize)")
-        print("[ChatView] ║   - MIME: \(attachment.mimeType)")
-        print("[ChatView] ║   - Base64 length: \(attachment.base64Data.count) chars")
       }
       let attachmentInfo = attachments.map { "📎 \($0.fileName)" }.joined(separator: "\n")
       content = content.isEmpty ? attachmentInfo : "\(content)\n\(attachmentInfo)"
     }
-    print("[ChatView] ╚══════════════════════════════════════════════════════════════")
     
     turns.append((.user, content))
     
     // Store attachments temporarily for the streaming call
     currentAttachments = attachments
-    print("[ChatView] ✓ User message added to turns, starting streaming...")
     streamResponse()
     // Note: Don't clear currentAttachments here - it will be cleared after Task starts
   }
@@ -195,17 +177,8 @@ final class ChatSession: ObservableObject {
           let stream: AsyncStream<String>
           if let openCodeService = svc as? OpenCodeProxyService,
              !capturedAttachments.isEmpty {
-            print("[ChatView] ╔══════════════════════════════════════════════════════════════")
-            print("[ChatView] ║ 🖼️  MULTIMODAL MODE ENABLED")
-            print("[ChatView] ╠══════════════════════════════════════════════════════════════")
-            print("[ChatView] ║ Service: OpenCode")
-            print("[ChatView] ║ Attachments: \(capturedAttachments.count)")
-            print("[ChatView] ║ Prompt length: \(prompt.count) chars")
             capturedAttachments.enumerated().forEach { index, attachment in
-              print("[ChatView] ║ Image #\(index + 1): \(attachment.fileName) (\(attachment.formattedFileSize))")
             }
-            print("[ChatView] ║ Now calling OpenCode streamDeltasWithAttachments...")
-            print("[ChatView] ╚══════════════════════════════════════════════════════════════")
             stream = try await openCodeService.streamDeltasWithAttachments(
               prompt: prompt,
               parameters: params,
@@ -213,17 +186,14 @@ final class ChatSession: ObservableObject {
             )
           } else {
             // Standard text-only streaming
-            print("[ChatView] 📝 Text-only mode (service: \(svc.id))")
             stream = try await svc.streamDeltas(prompt: prompt, parameters: params)
           }
           
-          print("[ChatView] 🎧 Starting to receive stream deltas...")
           var deltaCount = 0
           var totalChars = 0
           
           for await delta in stream {
             if Task.isCancelled {
-              print("[ChatView] ⚠️  Stream cancelled by user")
               break
             }
             if !delta.isEmpty {
@@ -235,27 +205,12 @@ final class ChatSession: ObservableObject {
               
               // Log every 10th delta or first/last
               if deltaCount == 1 {
-                print("[ChatView] ✓ First delta received: \(String(delta.prefix(50)))\(delta.count > 50 ? "..." : "")")
               } else if deltaCount % 10 == 0 {
-                print("[ChatView] 📊 Received \(deltaCount) deltas, \(totalChars) total characters")
               }
             }
           }
           
-          print("[ChatView] ╔══════════════════════════════════════════════════════════════")
-          print("[ChatView] ║ ✅ STREAM COMPLETE")
-          print("[ChatView] ╠══════════════════════════════════════════════════════════════")
-          print("[ChatView] ║ Total deltas: \(deltaCount)")
-          print("[ChatView] ║ Total characters: \(totalChars)")
-          print("[ChatView] ║ Final response length: \(turns[idx].content.count)")
-          print("[ChatView] ╚══════════════════════════════════════════════════════════════")
         } catch {
-          print("[ChatView] ╔══════════════════════════════════════════════════════════════")
-          print("[ChatView] ║ ❌ STREAM ERROR")
-          print("[ChatView] ╠══════════════════════════════════════════════════════════════")
-          print("[ChatView] ║ Error: \(error.localizedDescription)")
-          print("[ChatView] ║ Error type: \(type(of: error))")
-          print("[ChatView] ╚══════════════════════════════════════════════════════════════")
           turns[idx].content = "Error: \(error.localizedDescription)"
         }
       }
@@ -302,14 +257,11 @@ struct ChatView: View {
        let conversation = ConversationStore.shared.conversations.first(where: { $0.id == conversationId }) {
       initialMessages = conversation.messages
       self._currentConversationId = State(initialValue: conversationId)
-      print("🔵 [MainWindow Init] Loaded conversation ID: \(conversationId) with \(initialMessages.count) messages")
       for (index, msg) in initialMessages.enumerated() {
-        print("   Message \(index + 1): \(msg.role) - \(msg.content.prefix(50))...")
       }
     } else {
       initialMessages = []
       self._currentConversationId = State(initialValue: nil)
-      print("🔵 [MainWindow Init] Starting with empty conversation")
     }
     
     self._session = StateObject(wrappedValue: ChatSession(initialConversation: initialMessages))
@@ -332,7 +284,6 @@ struct ChatView: View {
         if displayMode == .mainWindow,
            let lastMessage = session.turns.last,
            lastMessage.role == .user {
-          print("🔵 [MainWindow] Auto-streaming response for loaded conversation")
           // Stream response without re-adding the user message
           Task { @MainActor in
             // Give UI a moment to render
@@ -486,11 +437,9 @@ struct ChatView: View {
   private func handleMinimalEntrySend() {
     guard !session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     guard !isSendingMessage else {
-      print("⚠️ [FloatingPanel] Already sending message, ignoring duplicate call")
       return
     }
     guard !isExpandingToMainWindow else { 
-      print("⚠️ [FloatingPanel] Already expanding, ignoring send")
       return 
     }
     
@@ -507,16 +456,13 @@ struct ChatView: View {
       
       Task { @MainActor in
         guard !isExpandingToMainWindow else {
-          print("⚠️ [FloatingPanel] Already expanding, skipping")
           return
         }
         isExpandingToMainWindow = true
         
-        print("🟢 [FloatingPanel] Expanding immediately with user message: \(userMessage.prefix(50))")
         
         // Save conversation with just the user message (no assistant response yet)
         let conversationId = conversationStore.createConversation(messages: session.turns)
-        print("🟢 [FloatingPanel] Created conversation ID: \(conversationId)")
         
         // Trigger immediate morph animation to main window
         // Main window will load this conversation and automatically start streaming
@@ -626,15 +572,12 @@ struct ChatView: View {
       if displayMode == .floatingPanel && !session.turns.isEmpty {
         Button(action: { 
           guard !isExpandingToMainWindow else {
-            print("⚠️ [FloatingPanel] Already expanding, ignoring button click")
             return
           }
           isExpandingToMainWindow = true
           
           // Save conversation and pass ID to AppDelegate before expanding
           let conversationId = conversationStore.createConversation(messages: session.turns)
-          print("🔵 [Expand Button] Created conversation with ID: \(conversationId)")
-          print("🔵 [Expand Button] Total conversations in store: \(conversationStore.conversations.count)")
           AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
         }) {
           HStack(spacing: 4) {
@@ -1026,10 +969,8 @@ struct ChatView: View {
           }
         } catch let error as AttachmentError {
           // Show error to user
-          print("❌ Attachment error: \(error.localizedDescription)")
           // TODO: Show user-facing error alert
         } catch {
-          print("❌ Unexpected attachment error: \(error)")
         }
       }
     }) {
@@ -1149,15 +1090,11 @@ struct ChatView: View {
     
     if let id = currentConversationId {
       // Update existing conversation
-      print("🟡 [MainWindow Save] Updating conversation ID: \(id)")
       conversationStore.updateConversation(id, messages: session.turns)
-      print("🟡 [MainWindow Save] Total conversations in store: \(conversationStore.conversations.count)")
     } else {
       // Create new conversation
-      print("🔴 [MainWindow Save] Creating NEW conversation (currentConversationId was nil!)")
       let newId = conversationStore.createConversation(messages: session.turns)
       currentConversationId = newId
-      print("🔴 [MainWindow Save] Created with ID: \(newId), Total: \(conversationStore.conversations.count)")
     }
   }
 }

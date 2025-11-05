@@ -33,7 +33,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverD
     NSApp.setActivationPolicy(.accessory)
 
     // App has launched
-    print("Osaurus server app launched")
 
     // Set up observers for server state changes
     setupObservers()
@@ -111,7 +110,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSPopoverD
   }
 
   func applicationWillTerminate(_ notification: Notification) {
-    print("Osaurus server app terminating")
     SharedConfigurationService.shared.remove()
   }
 

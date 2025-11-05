@@ -37,10 +37,8 @@ final class LoginItemService {
           }
         }
       } catch {
-        print("[Osaurus] Failed to update Start at Login state: \(error)")
       }
     } else {
-      print("[Osaurus] Start at Login requires macOS 13.0 or later")
     }
   }
 }

@@ -18,7 +18,6 @@ enum ChatConfigurationStore {
         let decoder = JSONDecoder()
         return try decoder.decode(ChatConfiguration.self, from: data)
       } catch {
-        print("[Osaurus] Failed to load ChatConfiguration: \(error)")
       }
     }
     // On first use, create defaults and persist
@@ -36,7 +35,6 @@ enum ChatConfigurationStore {
       let data = try encoder.encode(configuration)
       try data.write(to: url, options: [.atomic])
     } catch {
-      print("[Osaurus] Failed to save ChatConfiguration: \(error)")
     }
   }
 

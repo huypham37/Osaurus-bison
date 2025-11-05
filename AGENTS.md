@@ -21,6 +21,16 @@
 ## Project Structure
 - OpenAI-compatible API structures in `Models/OpenAIAPI.swift`; MLX integration via `MLXService.swift`; server uses SwiftNIO
 
+## Commit Procedures
+- **ALWAYS call print-statement-cleaner agent BEFORE committing**: Use the Task tool with `subagent_type: "print-statement-cleaner"` to scan and remove debug print statements from code
+- **Pre-commit checklist**:
+  1. Run print-statement-cleaner agent on changed files
+  2. Review cleaned code
+  3. Stage relevant files only (exclude separate projects, sample code, unnecessary screenshots)
+  4. Write descriptive commit message focusing on "why" not "what"
+  5. Commit and verify with `git status`
+- **Never skip**: The print-statement-cleaner step is mandatory for code hygiene
+
 ## Issue & Task Tracking
 - **GitHub Issues**: When user says "open new issues", use `gh issue create` to open issues on GitHub
 - **Local KANBAN**: `KANBAN.md` is for local task tracking only, not for GitHub issues

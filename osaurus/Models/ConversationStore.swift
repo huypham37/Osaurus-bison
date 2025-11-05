@@ -92,7 +92,7 @@ class ConversationStore: ObservableObject {
       let data = try JSONEncoder().encode(conversations)
       UserDefaults.standard.set(data, forKey: saveKey)
     } catch {
-      print("Failed to save conversations: \(error)")
+      // Silently fail - conversation persistence is non-critical
     }
   }
   
@@ -101,7 +101,7 @@ class ConversationStore: ObservableObject {
     do {
       conversations = try JSONDecoder().decode([ConversationItem].self, from: data)
     } catch {
-      print("Failed to load conversations: \(error)")
+      // Failed to decode - reset to empty state
       conversations = []
     }
   }

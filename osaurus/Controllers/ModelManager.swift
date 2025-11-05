@@ -481,8 +481,6 @@ final class ModelManager: NSObject, ObservableObject {
           try FileManager.default.removeItem(at: snapshotDirectory)
         } catch {
           // Non-fatal cleanup failure
-          print(
-            "Warning: failed to remove Hub snapshot cache at \(snapshotDirectory.path): \(error)")
         }
 
         // Verify
@@ -557,7 +555,6 @@ final class ModelManager: NSObject, ObservableObject {
         try fm.removeItem(atPath: path)
       } catch {
         // Log but keep state reset
-        print("Failed to delete model: \(error)")
       }
     }
   }

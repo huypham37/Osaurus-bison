@@ -48,7 +48,6 @@ final class DirectoryPickerService: ObservableObject {
 
       // Start accessing the security-scoped resource
       guard url.startAccessingSecurityScopedResource() else {
-        print("Failed to start accessing security-scoped resource")
         return
       }
 
@@ -57,7 +56,6 @@ final class DirectoryPickerService: ObservableObject {
       hasValidDirectory = true
 
     } catch {
-      print("Failed to resolve security-scoped bookmark: \(error)")
       UserDefaults.standard.removeObject(forKey: bookmarkKey)
     }
   }
@@ -83,7 +81,6 @@ final class DirectoryPickerService: ObservableObject {
   @MainActor func saveDirectoryFromFilePicker(_ url: URL) {
     // For security-scoped resources from file picker, we need to start accessing first
     guard url.startAccessingSecurityScopedResource() else {
-      print("Failed to access security-scoped resource from file picker")
       return
     }
 
@@ -107,7 +104,6 @@ final class DirectoryPickerService: ObservableObject {
 
       // Start accessing the new resource
       guard url.startAccessingSecurityScopedResource() else {
-        print("Failed to start accessing newly selected directory")
         return
       }
 
@@ -116,7 +112,6 @@ final class DirectoryPickerService: ObservableObject {
       hasValidDirectory = true
 
     } catch {
-      print("Failed to create security-scoped bookmark: \(error)")
     }
   }
 
