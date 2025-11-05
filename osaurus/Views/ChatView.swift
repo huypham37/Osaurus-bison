@@ -125,7 +125,7 @@ final class ChatSession: ObservableObject {
     // Store attachments temporarily for the streaming call
     currentAttachments = attachments
     streamResponse()
-    currentAttachments = []
+    // Note: Don't clear currentAttachments here - it will be cleared after Task starts
   }
   
   // Stream response for existing conversation (don't add user message again)
@@ -141,6 +141,10 @@ final class ChatSession: ObservableObject {
     let prompt = PromptBuilder.buildPrompt(from: messages)
 
     currentTask = Task { @MainActor in
+      // Capture attachments at the start of Task, then clear
+      let capturedAttachments = currentAttachments
+      currentAttachments = []
+      
       isStreaming = true
       ServerController.signalGenerationStart()
       defer {
@@ -170,12 +174,12 @@ final class ChatSession: ObservableObject {
           // Check if we're using OpenCode with attachments (multimodal)
           let stream: AsyncStream<String>
           if let openCodeService = svc as? OpenCodeProxyService,
-             !currentAttachments.isEmpty {
-            print("[ChatView] Using OpenCode multimodal streaming with \(currentAttachments.count) attachments")
+             !capturedAttachments.isEmpty {
+            print("[ChatView] Using OpenCode multimodal streaming with \(capturedAttachments.count) attachments")
             stream = try await openCodeService.streamDeltasWithAttachments(
               prompt: prompt,
               parameters: params,
-              attachments: currentAttachments
+              attachments: capturedAttachments
             )
           } else {
             // Standard text-only streaming

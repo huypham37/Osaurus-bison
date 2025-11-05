@@ -62,38 +62,27 @@ struct OpenCodeModelInfo: Codable {
 struct OpenCodeMessagePartInput: Codable {
     let type: String
     let text: String?
-    let source: ImageSource?  // For images (Anthropic format)
+    let mime: String?      // For file/image parts
+    let url: String?       // For file/image parts (data URI)
+    let filename: String?  // Optional filename for images
     
-    // Text-only init (backward compatibility)
+    // Text-only init
     init(type: String, text: String) {
         self.type = type
         self.text = text
-        self.source = nil
+        self.mime = nil
+        self.url = nil
+        self.filename = nil
     }
     
-    // Image init (Anthropic/Claude format)
-    init(type: String, base64Data: String, mimeType: String) {
+    // Image/File init (OpenCode FilePartInput format)
+    init(type: String, base64Data: String, mimeType: String, filename: String? = nil) {
         self.type = type
         self.text = nil
-        self.source = ImageSource(type: "base64", mediaType: mimeType, data: base64Data)
-    }
-    
-    enum CodingKeys: String, CodingKey {
-        case type
-        case text
-        case source
-    }
-}
-
-struct ImageSource: Codable {
-    let type: String  // "base64"
-    let mediaType: String  // "image/jpeg", "image/png", etc.
-    let data: String  // Base64 data
-    
-    enum CodingKeys: String, CodingKey {
-        case type
-        case mediaType = "media_type"
-        case data
+        self.mime = mimeType
+        // Create data URI: data:image/png;base64,iVBORw0KGgo...
+        self.url = "data:\(mimeType);base64,\(base64Data)"
+        self.filename = filename
     }
 }
 
@@ -222,15 +211,35 @@ final class OpenCodeProxyService: ModelService {
         // Add text part first
         parts.append(OpenCodeMessagePartInput(type: "text", text: prompt))
         
-        // Add image parts (Anthropic/Claude API format)
-        for attachment in attachments {
-            print("[OpenCodeProxy] Adding image: \(attachment.fileName) (\(attachment.formattedFileSize))")
-            print("[OpenCodeProxy] MIME type: \(attachment.mimeType), data length: \(attachment.base64Data.count)")
-            parts.append(OpenCodeMessagePartInput(
-                type: "image",
+        // Add image parts (OpenCode FilePartInput format)
+        for (index, attachment) in attachments.enumerated() {
+            print("[OpenCodeProxy] ═══════════════════════════════════════")
+            print("[OpenCodeProxy] Image #\(index + 1):")
+            print("[OpenCodeProxy]   File: \(attachment.fileName)")
+            print("[OpenCodeProxy]   Size: \(attachment.formattedFileSize)")
+            print("[OpenCodeProxy]   MIME: \(attachment.mimeType)")
+            print("[OpenCodeProxy]   Base64 length: \(attachment.base64Data.count) chars")
+            print("[OpenCodeProxy]   Base64 prefix (50 chars): \(String(attachment.base64Data.prefix(50)))...")
+            
+            // Create the image part (OpenCode expects FilePartInput: type="file" with data URI)
+            let imagePart = OpenCodeMessagePartInput(
+                type: "file",
                 base64Data: attachment.base64Data,
-                mimeType: attachment.mimeType
-            ))
+                mimeType: attachment.mimeType,
+                filename: attachment.fileName
+            )
+            
+            // Log the structure being created
+            if let dataUrl = imagePart.url {
+                print("[OpenCodeProxy]   Data URI prefix (80 chars): \(String(dataUrl.prefix(80)))...")
+                print("[OpenCodeProxy]   Data URI format: ✓")
+            }
+            print("[OpenCodeProxy]   Part type: file")
+            print("[OpenCodeProxy]   MIME type: \(imagePart.mime ?? "nil")")
+            print("[OpenCodeProxy]   Filename: \(imagePart.filename ?? "nil")")
+            
+            parts.append(imagePart)
+            print("[OpenCodeProxy] ═══════════════════════════════════════")
         }
 
         print("[OpenCodeProxy] Sending \(parts.count) parts to OpenCode")
@@ -262,13 +271,42 @@ final class OpenCodeProxyService: ModelService {
                     var urlRequest = URLRequest(url: url)
                     urlRequest.httpMethod = "POST"
                     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                    urlRequest.httpBody = try JSONEncoder().encode(messageRequest)
+                    
+                    // Encode the request
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = .prettyPrinted
+                    let requestBody = try encoder.encode(messageRequest)
+                    urlRequest.httpBody = requestBody
+                    
+                    // Log the complete JSON request
+                    if let jsonString = String(data: requestBody, encoding: .utf8) {
+                        print("[OpenCodeProxy] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        print("[OpenCodeProxy] REQUEST JSON:")
+                        // Truncate base64 data in URL field for readability in logs
+                        let truncatedJson = jsonString.replacingOccurrences(
+                            of: #"("url"\s*:\s*"data:[^;]+;base64,)([^"]{100})[^"]*""#,
+                            with: "$1$2...[TRUNCATED]\"",
+                            options: .regularExpression
+                        )
+                        print(truncatedJson)
+                        print("[OpenCodeProxy] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    }
 
-                    let (_, response) = try await self.session.data(for: urlRequest)
+                    let (data, response) = try await self.session.data(for: urlRequest)
 
-                    guard let httpResponse = response as? HTTPURLResponse,
-                          httpResponse.statusCode == 200 else {
-                        print("[OpenCodeProxy] Failed to send message")
+                    guard let httpResponse = response as? HTTPURLResponse else {
+                        print("[OpenCodeProxy] Failed to send message: No HTTP response")
+                        eventTask.cancel()
+                        throw OpenCodeError.invalidResponse
+                    }
+                    
+                    print("[OpenCodeProxy] Response status: \(httpResponse.statusCode)")
+                    
+                    if httpResponse.statusCode != 200 {
+                        print("[OpenCodeProxy] Failed to send message - Status: \(httpResponse.statusCode)")
+                        if let responseBody = String(data: data, encoding: .utf8) {
+                            print("[OpenCodeProxy] Response body: \(responseBody)")
+                        }
                         eventTask.cancel()
                         throw OpenCodeError.invalidResponse
                     }
