@@ -710,7 +710,7 @@ final class OpenCodeProxyService: ModelService {
                     } else if line.hasPrefix("event:") {
                         eventType = String(line.dropFirst(6)).trimmingCharacters(in: .whitespacesAndNewlines)
                     } else if line.hasPrefix("data:") {
-                        let data = String(line.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let data = String(line.dropFirst(5))
                         if eventData.isEmpty {
                             eventData = data
                         } else {
