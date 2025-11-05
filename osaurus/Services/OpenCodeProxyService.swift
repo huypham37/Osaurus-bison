@@ -189,19 +189,26 @@ final class OpenCodeProxyService: ModelService {
         parameters: GenerationParameters,
         attachments: [Attachment]
     ) async throws -> AsyncStream<String> {
-        print("[OpenCodeProxy] streamDeltasWithAttachments called")
-        print("[OpenCodeProxy] Prompt: \(prompt.prefix(50))...")
-        print("[OpenCodeProxy] Attachments: \(attachments.count)")
+        print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ STREAM REQUEST INITIATED")
+        print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ Prompt: \(prompt.prefix(100))...")
+        print("[OpenCodeProxy] ║ Prompt length: \(prompt.count) characters")
+        print("[OpenCodeProxy] ║ Attachments count: \(attachments.count)")
+        print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
 
         // Ensure we have a session
         if currentSessionID == nil {
-            print("[OpenCodeProxy] Creating new session...")
+            print("[OpenCodeProxy] ⚙️  Creating new OpenCode session...")
             let session = try await createSession()
             currentSessionID = session.id
-            print("[OpenCodeProxy] Session created: \(session.id)")
+            print("[OpenCodeProxy] ✓ Session created: \(session.id)")
+        } else {
+            print("[OpenCodeProxy] ♻️  Reusing existing session: \(currentSessionID!)")
         }
 
         guard let sessionID = currentSessionID else {
+            print("[OpenCodeProxy] ✗ FATAL: No session available")
             throw OpenCodeError.noSession
         }
 
@@ -209,17 +216,24 @@ final class OpenCodeProxyService: ModelService {
         var parts: [OpenCodeMessagePartInput] = []
         
         // Add text part first
+        print("[OpenCodeProxy] 📝 Building message parts...")
         parts.append(OpenCodeMessagePartInput(type: "text", text: prompt))
+        print("[OpenCodeProxy]    ✓ Added text part (length: \(prompt.count) chars)")
         
         // Add image parts (OpenCode FilePartInput format)
+        if !attachments.isEmpty {
+            print("[OpenCodeProxy] 🖼️  Processing \(attachments.count) image attachment(s)...")
+        }
+        
         for (index, attachment) in attachments.enumerated() {
-            print("[OpenCodeProxy] ═══════════════════════════════════════")
-            print("[OpenCodeProxy] Image #\(index + 1):")
-            print("[OpenCodeProxy]   File: \(attachment.fileName)")
-            print("[OpenCodeProxy]   Size: \(attachment.formattedFileSize)")
-            print("[OpenCodeProxy]   MIME: \(attachment.mimeType)")
-            print("[OpenCodeProxy]   Base64 length: \(attachment.base64Data.count) chars")
-            print("[OpenCodeProxy]   Base64 prefix (50 chars): \(String(attachment.base64Data.prefix(50)))...")
+            print("[OpenCodeProxy] ╔═══════════════════════════════════════════════════════")
+            print("[OpenCodeProxy] ║ 🖼️  IMAGE ATTACHMENT #\(index + 1)")
+            print("[OpenCodeProxy] ╠═══════════════════════════════════════════════════════")
+            print("[OpenCodeProxy] ║ Filename:     \(attachment.fileName)")
+            print("[OpenCodeProxy] ║ File size:    \(attachment.formattedFileSize)")
+            print("[OpenCodeProxy] ║ MIME type:    \(attachment.mimeType)")
+            print("[OpenCodeProxy] ║ Base64 len:   \(attachment.base64Data.count) characters")
+            print("[OpenCodeProxy] ║ Base64 start: \(String(attachment.base64Data.prefix(60)))...")
             
             // Create the image part (OpenCode expects FilePartInput: type="file" with data URI)
             let imagePart = OpenCodeMessagePartInput(
@@ -229,20 +243,33 @@ final class OpenCodeProxyService: ModelService {
                 filename: attachment.fileName
             )
             
-            // Log the structure being created
+            // Validate the structure being created
             if let dataUrl = imagePart.url {
-                print("[OpenCodeProxy]   Data URI prefix (80 chars): \(String(dataUrl.prefix(80)))...")
-                print("[OpenCodeProxy]   Data URI format: ✓")
+                let dataUriLength = dataUrl.count
+                let expectedPrefix = "data:\(attachment.mimeType);base64,"
+                let hasValidPrefix = dataUrl.hasPrefix(expectedPrefix)
+                
+                print("[OpenCodeProxy] ║ Data URI len: \(dataUriLength) characters")
+                print("[OpenCodeProxy] ║ Data URI prefix: \(String(dataUrl.prefix(100)))...")
+                print("[OpenCodeProxy] ║ Expected prefix: \(expectedPrefix)")
+                print("[OpenCodeProxy] ║ Prefix valid: \(hasValidPrefix ? "✓ YES" : "✗ NO - MISMATCH!")")
+            } else {
+                print("[OpenCodeProxy] ║ ⚠️  WARNING: Data URI is nil!")
             }
-            print("[OpenCodeProxy]   Part type: file")
-            print("[OpenCodeProxy]   MIME type: \(imagePart.mime ?? "nil")")
-            print("[OpenCodeProxy]   Filename: \(imagePart.filename ?? "nil")")
+            
+            print("[OpenCodeProxy] ║ Part structure:")
+            print("[OpenCodeProxy] ║   - type: \(imagePart.type)")
+            print("[OpenCodeProxy] ║   - mime: \(imagePart.mime ?? "nil")")
+            print("[OpenCodeProxy] ║   - filename: \(imagePart.filename ?? "nil")")
+            print("[OpenCodeProxy] ║   - url: \(imagePart.url != nil ? "present (\(imagePart.url!.count) chars)" : "nil")")
             
             parts.append(imagePart)
-            print("[OpenCodeProxy] ═══════════════════════════════════════")
+            print("[OpenCodeProxy] ║ ✓ Image part added to request")
+            print("[OpenCodeProxy] ╚═══════════════════════════════════════════════════════")
         }
 
-        print("[OpenCodeProxy] Sending \(parts.count) parts to OpenCode")
+        print("[OpenCodeProxy] 📦 Total parts prepared: \(parts.count) (1 text + \(attachments.count) image(s))")
+        print("[OpenCodeProxy] 🚀 Preparing to send multimodal message to OpenCode...")
 
         return AsyncStream { continuation in
             Task {
@@ -265,12 +292,21 @@ final class OpenCodeProxyService: ModelService {
                         noReply: false
                     )
 
-                    print("[OpenCodeProxy] Sending message to session \(sessionID)")
+                    print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ 📤 SENDING MESSAGE TO OPENCODE")
+                    print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ Session ID: \(sessionID)")
+                    print("[OpenCodeProxy] ║ Provider: \(messageRequest.model.providerID)")
+                    print("[OpenCodeProxy] ║ Model: \(messageRequest.model.modelID)")
+                    print("[OpenCodeProxy] ║ Parts count: \(messageRequest.parts.count)")
+                    print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
 
                     let url = URL(string: "\(self.baseURL)/session/\(sessionID)/message")!
                     var urlRequest = URLRequest(url: url)
                     urlRequest.httpMethod = "POST"
                     urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    
+                    print("[OpenCodeProxy] 🌐 Target URL: \(url.absoluteString)")
                     
                     // Encode the request
                     let encoder = JSONEncoder()
@@ -278,43 +314,95 @@ final class OpenCodeProxyService: ModelService {
                     let requestBody = try encoder.encode(messageRequest)
                     urlRequest.httpBody = requestBody
                     
+                    let bodySize = requestBody.count
+                    let bodySizeFormatted = ByteCountFormatter.string(fromByteCount: Int64(bodySize), countStyle: .file)
+                    print("[OpenCodeProxy] 📦 Request body size: \(bodySizeFormatted) (\(bodySize) bytes)")
+                    
                     // Log the complete JSON request
                     if let jsonString = String(data: requestBody, encoding: .utf8) {
-                        print("[OpenCodeProxy] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-                        print("[OpenCodeProxy] REQUEST JSON:")
+                        print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ 📋 REQUEST JSON PAYLOAD:")
+                        print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
                         // Truncate base64 data in URL field for readability in logs
                         let truncatedJson = jsonString.replacingOccurrences(
                             of: #"("url"\s*:\s*"data:[^;]+;base64,)([^"]{100})[^"]*""#,
-                            with: "$1$2...[TRUNCATED]\"",
+                            with: "$1$2...[TRUNCATED to save space]\"",
                             options: .regularExpression
                         )
                         print(truncatedJson)
-                        print("[OpenCodeProxy] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
                     }
 
+                    print("[OpenCodeProxy] ⏳ Sending HTTP POST request to OpenCode...")
+                    let startTime = Date()
                     let (data, response) = try await self.session.data(for: urlRequest)
+                    let elapsed = Date().timeIntervalSince(startTime)
+
+                    print("[OpenCodeProxy] ⏱️  Request completed in \(String(format: "%.2f", elapsed))s")
 
                     guard let httpResponse = response as? HTTPURLResponse else {
-                        print("[OpenCodeProxy] Failed to send message: No HTTP response")
+                        print("[OpenCodeProxy] ✗ FATAL: No HTTP response received from OpenCode")
                         eventTask.cancel()
                         throw OpenCodeError.invalidResponse
                     }
                     
-                    print("[OpenCodeProxy] Response status: \(httpResponse.statusCode)")
+                    print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ 📥 OPENCODE RESPONSE RECEIVED")
+                    print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ Status code: \(httpResponse.statusCode) \(httpResponse.statusCode == 200 ? "✓ OK" : "✗ ERROR")")
+                    print("[OpenCodeProxy] ║ Content-Type: \(httpResponse.value(forHTTPHeaderField: "Content-Type") ?? "none")")
+                    print("[OpenCodeProxy] ║ Response size: \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))")
                     
                     if httpResponse.statusCode != 200 {
-                        print("[OpenCodeProxy] Failed to send message - Status: \(httpResponse.statusCode)")
+                        print("[OpenCodeProxy] ║ ✗ HTTP ERROR: Status code \(httpResponse.statusCode)")
                         if let responseBody = String(data: data, encoding: .utf8) {
-                            print("[OpenCodeProxy] Response body: \(responseBody)")
+                            print("[OpenCodeProxy] ║ Error response body:")
+                            print("[OpenCodeProxy] ║ \(responseBody)")
                         }
+                        print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
                         eventTask.cancel()
                         throw OpenCodeError.invalidResponse
                     }
-
-                    print("[OpenCodeProxy] Message sent successfully, waiting for events...")
-
-                    // Wait for events to complete (eventTask will finish when done)
-                    try? await eventTask.value
+                    
+                    // Parse the response to extract text from parts
+                    print("[OpenCodeProxy] ║ Parsing response JSON...")
+                    let messageResponse = try JSONDecoder().decode(OpenCodeMessageResponse.self, from: data)
+                    
+                    print("[OpenCodeProxy] ║ ✓ Response parsed successfully!")
+                    print("[OpenCodeProxy] ║ Assistant message ID: \(messageResponse.info.id)")
+                    print("[OpenCodeProxy] ║ Parts count: \(messageResponse.parts.count)")
+                    print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
+                    
+                    // Extract text from all text parts
+                    var fullText = ""
+                    for (index, part) in messageResponse.parts.enumerated() {
+                        print("[OpenCodeProxy] 📄 Part \(index + 1): type=\(part.type)")
+                        
+                        if part.type == "text", let text = part.text, !text.isEmpty {
+                            print("[OpenCodeProxy] ✓ Found text content (\(text.count) chars)")
+                            fullText += text
+                        }
+                    }
+                    
+                    if !fullText.isEmpty {
+                        print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ 📝 YIELDING COMPLETE RESPONSE TO UI")
+                        print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ Total text length: \(fullText.count) characters")
+                        print("[OpenCodeProxy] ║ Preview: \(String(fullText.prefix(100)))\(fullText.count > 100 ? "..." : "")")
+                        print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
+                        
+                        // Yield the complete text to the UI
+                        continuation.yield(fullText)
+                    } else {
+                        print("[OpenCodeProxy] ⚠️  No text content found in response parts")
+                    }
+                    
+                    // Cancel SSE listener since we got the complete response
+                    eventTask.cancel()
+                    
+                    // Finish the stream
+                    continuation.finish()
 
                 } catch {
                     print("[OpenCodeProxy] Streaming error: \(error)")
@@ -664,19 +752,31 @@ final class OpenCodeProxyService: ModelService {
         let url = URL(string: "\(baseURL)/event")!
         var request = URLRequest(url: url)
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 30  // 30 second timeout
 
-        print("[OpenCodeProxy] Connecting to SSE stream: \(url)")
+        print("[OpenCodeProxy] ╔══════════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ 🎧 CONNECTING TO SSE EVENT STREAM")
+        print("[OpenCodeProxy] ╠══════════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ URL: \(url.absoluteString)")
+        print("[OpenCodeProxy] ║ Session: \(sessionID)")
+        print("[OpenCodeProxy] ║ Timeout: 30s")
+        print("[OpenCodeProxy] ╚══════════════════════════════════════════════════════════")
 
         // Use URLSession's bytes stream for SSE
         let (bytes, response) = try await session.bytes(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            print("[OpenCodeProxy] Failed to connect to event stream")
+            print("[OpenCodeProxy] ✗ FATAL: Failed to connect to event stream")
+            if let httpResponse = response as? HTTPURLResponse {
+                print("[OpenCodeProxy] Status code: \(httpResponse.statusCode)")
+            }
             throw OpenCodeError.invalidResponse
         }
 
-        print("[OpenCodeProxy] SSE stream connected, listening for events...")
+        print("[OpenCodeProxy] ✓ SSE stream connected successfully!")
+        print("[OpenCodeProxy] 👂 Listening for events from OpenCode...")
+        print("[OpenCodeProxy] (Expecting: message.part.updated, message.updated, session.idle)")
 
         var byteBuffer = Data()
         var eventType = ""
@@ -684,8 +784,22 @@ final class OpenCodeProxyService: ModelService {
         var messageComplete = false
         var lastTextLength = 0  // Track how much text we've already sent
         var assistantMessageID: String? = nil  // Track the assistant's message ID to filter events
+        var lastByteTime = Date()
+        var totalBytesReceived = 0
 
         for try await byte in bytes {
+            totalBytesReceived += 1
+            lastByteTime = Date()
+            
+            // Log first byte received
+            if totalBytesReceived == 1 {
+                print("[OpenCodeProxy] 🎉 First byte received from SSE stream!")
+            }
+            
+            // Log every 100 bytes to show activity
+            if totalBytesReceived % 100 == 0 {
+                print("[OpenCodeProxy] 📊 Received \(totalBytesReceived) bytes from SSE stream...")
+            }
             byteBuffer.append(byte)
 
             // Try to decode the buffer as UTF-8 and process complete lines
@@ -728,7 +842,13 @@ final class OpenCodeProxyService: ModelService {
 
                     // If message is complete, we can stop listening
                     if messageComplete {
-                        print("[OpenCodeProxy] Message complete, stopping event listener")
+                        print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ 🏁 STREAM COMPLETE")
+                        print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ Stopping event listener")
+                        print("[OpenCodeProxy] ║ Total text received: \(lastTextLength) characters")
+                        print("[OpenCodeProxy] ║ Stream finished successfully!")
+                        print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
                         continuation.finish()
                         return
                     }
@@ -736,7 +856,18 @@ final class OpenCodeProxyService: ModelService {
             }
         }
 
-        print("[OpenCodeProxy] SSE stream ended")
+        print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ 🔚 SSE STREAM ENDED")
+        print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+        print("[OpenCodeProxy] ║ Total bytes received: \(totalBytesReceived)")
+        print("[OpenCodeProxy] ║ Message completed: \(messageComplete ? "✓ Yes" : "✗ No")")
+        print("[OpenCodeProxy] ║ Last byte time: \(lastByteTime)")
+        print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
+        
+        if !messageComplete {
+            print("[OpenCodeProxy] ⚠️  Stream ended but message not complete - this may indicate an issue")
+        }
+        
         continuation.finish()
     }
 
@@ -780,6 +911,7 @@ final class OpenCodeProxyService: ModelService {
 
                     // Only process parts from the assistant's message, not the user's
                     guard let assistantID = assistantMessageID, partMessageID == assistantID else {
+                        print("[OpenCodeProxy] 🔇 Skipping part update (not from assistant message)")
                         return  // Skip parts from user's message
                     }
 
@@ -788,10 +920,23 @@ final class OpenCodeProxyService: ModelService {
                     if fullText.count > lastTextLength {
                         let startIndex = fullText.index(fullText.startIndex, offsetBy: lastTextLength)
                         let newText = String(fullText[startIndex...])
-                        print("[OpenCodeProxy] Yielding delta: \(newText.prefix(50))...")
+                        let deltaSize = newText.count
+                        print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ 💬 RESPONSE DELTA RECEIVED FROM OPENCODE")
+                        print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ Previous length: \(lastTextLength) chars")
+                        print("[OpenCodeProxy] ║ New total length: \(fullText.count) chars")
+                        print("[OpenCodeProxy] ║ Delta size: \(deltaSize) chars")
+                        print("[OpenCodeProxy] ║ Delta preview: \(String(newText.prefix(100)))\(newText.count > 100 ? "..." : "")")
+                        print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ✓ Yielding delta to Osaurus UI...")
                         continuation.yield(newText)
                         lastTextLength = fullText.count
+                    } else {
+                        print("[OpenCodeProxy] 🔄 No new content (length unchanged: \(fullText.count))")
                     }
+                } else {
+                    print("[OpenCodeProxy] ⚠️  message.part.updated event missing expected fields")
                 }
 
             case "message.updated":
@@ -803,34 +948,57 @@ final class OpenCodeProxyService: ModelService {
                     if let role = info["role"] as? String,
                        role == "assistant",
                        let msgID = info["id"] as? String {
-                        assistantMessageID = msgID
-                        print("[OpenCodeProxy] Tracking assistant message: \(msgID)")
+                        if assistantMessageID == nil {
+                            assistantMessageID = msgID
+                            print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                            print("[OpenCodeProxy] ║ 🤖 ASSISTANT MESSAGE IDENTIFIED")
+                            print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                            print("[OpenCodeProxy] ║ Message ID: \(msgID)")
+                            print("[OpenCodeProxy] ║ Now tracking this message for text deltas...")
+                            print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
+                        }
                     }
 
                     // Check if message has completed
                     if let time = info["time"] as? [String: Any],
                        time["completed"] != nil {
-                        print("[OpenCodeProxy] Message completed")
+                        print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ ✅ MESSAGE GENERATION COMPLETE")
+                        print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                        print("[OpenCodeProxy] ║ Total characters received: \(lastTextLength)")
+                        print("[OpenCodeProxy] ║ Assistant message ID: \(assistantMessageID ?? "unknown")")
+                        print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
                         messageComplete = true
                     }
                 }
 
             case "session.idle":
                 // Session is idle, message processing complete
-                print("[OpenCodeProxy] Session idle, finishing stream")
+                print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                print("[OpenCodeProxy] ║ 💤 SESSION IDLE")
+                print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                print("[OpenCodeProxy] ║ OpenCode session is now idle")
+                print("[OpenCodeProxy] ║ Finishing stream...")
+                print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
                 messageComplete = true
 
             case "message.error":
                 // Handle error
                 if let properties = json["properties"] as? [String: Any],
                    let error = properties["error"] as? String {
-                    print("[OpenCodeProxy] Message error: \(error)")
+                    print("[OpenCodeProxy] ╔════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ ❌ MESSAGE ERROR FROM OPENCODE")
+                    print("[OpenCodeProxy] ╠════════════════════════════════════════════════════")
+                    print("[OpenCodeProxy] ║ Error: \(error)")
+                    print("[OpenCodeProxy] ╚════════════════════════════════════════════════════")
                     continuation.yield("Error: \(error)")
                     messageComplete = true
                 }
 
             default:
-                // Silently ignore other event types (session.updated, etc.)
+                // Log other event types for debugging
+                let eventSummary = json.keys.joined(separator: ", ")
+                print("[OpenCodeProxy] 🔔 Event: \(eventType) (keys: \(eventSummary))")
                 break
             }
         } catch {
