@@ -1,0 +1,241 @@
+[
+  {
+    "url": "https://developer.apple.com/documentation/SwiftUI/View/backgroundExtensionEffect()",
+    "title": "This page requires JavaScript.",
+    "content": "SwiftUI  View  backgroundExtensionEffect() Instance MethodbackgroundExtensionEffect()Adds the background extension effect to the view. The view will be duplicated into mirrored copies which will be placed around the view on any edge with available safe area. Additionally, a blur effect will be applied on top to blur out the copies.iOS 26.0+iPadOS 26.0+Mac Catalyst 26.0+macOS 26.0+tvOS 26.0+visionOS 26.0+watchOS 26.0+@MainActor @preconcurrency\nfunc backgroundExtensionEffect() -> some View\nDiscussionUse this modifier when you want to extend the view beyond its bounds so the copies can function as backgrounds for other elements on top. The most common use case is to apply this to a view in the detail column of a navigation split view so it can extend under the sidebar or inspector region to provide seamless immersive visuals.NavigationSplitView {\n    // sidebar content\n} detail: {\n    ZStack {\n        BannerView()\n            .backgroundExtensionEffect()\n    }\n}\n.inspector(isPresented: $showInspector) {\n    // inspector content\n}\nApply this modifier with discretion. This should often be used with only a single instance of background content with consideration of visual clarity and performance.NoteThis modifier will clip the view to prevent copies from overlapping with each other. Current page is backgroundExtensionEffect()",
+    "links": [
+      {
+        "url": "https://developer.apple.com/documentation/",
+        "text": "Documentation"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/samplecode/",
+        "text": "Sample Code"
+      },
+      {
+        "url": "https://developer.apple.com/documentation",
+        "text": "Documentation"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui",
+        "text": "SwiftUI"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass",
+        "text": "Adopting Liquid Glass"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/updates/swiftui",
+        "text": "SwiftUI updates"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/landmarks-building-an-app-with-liquid-glass",
+        "text": "Landmarks: Building an app with Liquid Glass"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/app-organization",
+        "text": "App organization"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/scenes",
+        "text": "Scenes"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/windows",
+        "text": "Windows"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/immersive-spaces",
+        "text": "Immersive spaces"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/documents",
+        "text": "Documents"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/navigation",
+        "text": "Navigation"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/modal-presentations",
+        "text": "Modal presentations"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/toolbars",
+        "text": "Toolbars"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/search",
+        "text": "Search"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/app-extensions",
+        "text": "App extensions"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/model-data",
+        "text": "Model data"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/environment-values",
+        "text": "Environment values"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/preferences",
+        "text": "Preferences"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/addpasstowalletbuttonstyle(_:)",
+        "text": "func addPassToWalletButtonStyle(AddPassToWalletButtonStyle) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/allowswindowactivationevents()",
+        "text": "func allowsWindowActivationEvents() -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/allowswindowactivationevents()",
+        "text": "func allowsWindowActivationEvents() -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/appstoremerchandising(ispresented:kind:ondismiss:)",
+        "text": "func appStoreMerchandising(isPresented: Binding<Bool>, kind: AppStoreMerchandisingKind, onDismiss: ((Result<AppStoreMerchandisingKind.PresentationResult, any Error>) async -> ())?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/appstoremerchandising(ispresented:kind:ondismiss:)",
+        "text": "func appStoreMerchandising(isPresented: Binding<Bool>, kind: AppStoreMerchandisingKind, onDismiss: ((Result<AppStoreMerchandisingKind.PresentationResult, any Error>) async -> ())?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/aspectratio3d(_:contentmode:)",
+        "text": "func aspectRatio3D(Size3D?, contentMode: ContentMode) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/assistiveaccessnavigationicon(_:)",
+        "text": "func assistiveAccessNavigationIcon(Image) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/assistiveaccessnavigationicon(systemimage:)",
+        "text": "func assistiveAccessNavigationIcon(systemImage: String) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/attributedtextformattingdefinition(_:)",
+        "text": "func attributedTextFormattingDefinition(_:)"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/automateddeviceenrollmentaddition(ispresented:)",
+        "text": "func automatedDeviceEnrollmentAddition(isPresented: Binding<Bool>) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/backgroundextensioneffect()",
+        "text": "func backgroundExtensionEffect() -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/backgroundextensioneffect(isenabled:)",
+        "text": "func backgroundExtensionEffect(isEnabled: Bool) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/breakthrougheffect(_:)",
+        "text": "func breakthroughEffect(BreakthroughEffect) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/buttonsizing(_:)",
+        "text": "func buttonSizing(ButtonSizing) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/certificatesheet(trust:title:message:help:)",
+        "text": "func certificateSheet(trust: Binding<SecTrust?>, title: String?, message: String?, help: URL?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chart3dcameraprojection(_:)",
+        "text": "func chart3DCameraProjection(Chart3DCameraProjection) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chart3dpose(_:)",
+        "text": "func chart3DPose(_:)"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chart3drenderingstyle(_:)",
+        "text": "func chart3DRenderingStyle(Chart3DRenderingStyle) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzaxis(_:)",
+        "text": "func chartZAxis(Visibility) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzaxis(content:)",
+        "text": "func chartZAxis<Content>(content: () -> Content) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzaxislabel(_:position:alignment:spacing:)",
+        "text": "func chartZAxisLabel(_:position:alignment:spacing:)"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzscale(domain:range:type:)",
+        "text": "func chartZScale<Domain, Range>(domain: Domain, range: Range, type: ScaleType?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzscale(domain:type:)",
+        "text": "func chartZScale<Domain>(domain: Domain, type: ScaleType?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzscale(range:type:)",
+        "text": "func chartZScale<Range>(range: Range, type: ScaleType?) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzselection(range:)",
+        "text": "func chartZSelection<P>(range: Binding<ClosedRange<P>?>) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/chartzselection(value:)",
+        "text": "func chartZSelection<P>(value: Binding<P?>) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/contactaccessbuttoncaption(_:)",
+        "text": "func contactAccessButtonCaption(ContactAccessButton.Caption) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/contactaccessbuttonstyle(_:)",
+        "text": "func contactAccessButtonStyle(ContactAccessButton.Style) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/contactaccesspicker(ispresented:completionhandler:)",
+        "text": "func contactAccessPicker(isPresented: Binding<Bool>, completionHandler: ([String]) -> ()) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/containercorneroffset(_:sizetofit:)",
+        "text": "func containerCornerOffset(Edge.Set, sizeToFit: Bool) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view/containervalue(_:_:)",
+        "text": "func containerValue<V>(WritableKeyPath<ContainerValues, V>, V) -> some View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui",
+        "text": "SwiftUI"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view",
+        "text": "View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/Swift/MainActor",
+        "text": "MainActor"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/swiftui/view",
+        "text": "View"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/SwiftUI/View/backgroundExtensionEffect()#discussion",
+        "text": "Discussion"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/",
+        "text": "Documentation"
+      },
+      {
+        "url": "https://developer.apple.com/documentation/",
+        "text": "Documentation"
+      }
+    ]
+  }
+]
