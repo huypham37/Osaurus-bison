@@ -105,7 +105,7 @@ final class SharedConfigurationService {
           withJSONObject: values, options: [.prettyPrinted, .sortedKeys])
         try jsonData.write(to: fileURL, options: [.atomic])
       } catch {
-        // Error writing shared configuration
+        )
       }
     case .stopped, .stopping, .error:
       // Remove the file to indicate this instance is not serving

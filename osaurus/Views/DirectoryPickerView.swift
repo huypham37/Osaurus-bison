@@ -107,9 +107,6 @@ struct DirectoryPickerView: View {
           directoryPicker.saveDirectoryFromFilePicker(url)
         }
       case .failure(let error):
-        // Error selecting directory
-        break
-
       }
     }
   }

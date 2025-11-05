@@ -14,16 +14,17 @@ struct MarkdownMessageView: View {
       ForEach(parseBlocks(text), id: \.id) { block in
         switch block.kind {
         case .paragraph(let md):
-          // Use native markdown parsing with proper line break handling
-          // The parseBlocks function already separates paragraphs, so we just need inline formatting
-          if let attributed = try? AttributedString(markdown: md) {
+          // Convert single newlines to double newlines for proper markdown rendering
+          // Markdown treats single newlines as spaces, so we need double newlines for line breaks
+          let markdownText = md.replacingOccurrences(of: "\n", with: "\n\n")
+          if let attributed = try? AttributedString(markdown: markdownText) {
             Text(attributed)
               .font(Typography.body(baseWidth))
-              .lineSpacing(6)
+              .lineSpacing(4)
           } else {
             Text(md)
               .font(Typography.body(baseWidth))
-              .lineSpacing(6)
+              .lineSpacing(4)
           }
         case .code(let code, let lang):
           CodeBlockView(code: code, language: lang, baseWidth: baseWidth)
