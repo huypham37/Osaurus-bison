@@ -743,7 +743,7 @@ struct ChatView: View {
       @State var hasInitialScroll = false
       ZStack(alignment: .bottomTrailing) {
         ScrollView {
-          LazyVStack(spacing: 12) {
+          LazyVStack(spacing: 24) {
             ForEach(Array(session.turns.enumerated()), id: \.offset) { item in
               let turn = item.element
               HStack(alignment: .top, spacing: 12) {
@@ -757,13 +757,8 @@ struct ChatView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
                     )
-                } else {
-                  Image(systemName: "sparkles")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(theme.secondaryText)
-                    .frame(width: 32, height: 32)
-                }
 
+                }
                 VStack(alignment: .leading, spacing: 6) {
                   ZStack(alignment: .topTrailing) {
                     Group {
@@ -777,16 +772,16 @@ struct ChatView: View {
                             .foregroundColor(theme.primaryText)
                         }
                         .padding(12)
+                        .background(
+                          GlassMessageBubble(role: .assistant, isStreaming: true)
+                        )
                       } else {
                         MarkdownMessageView(text: turn.content, baseWidth: width)
                           .font(Typography.body(width))
                           .foregroundColor(theme.primaryText)
-                          .padding(turn.role == .user ? 12 : 0)
+                          .padding(12)
                           .background(
-                            turn.role == .user ? 
-                              AnyView(RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.gray.opacity(0.15))) : 
-                              AnyView(Color.clear)
+                            GlassMessageBubble(role: turn.role, isStreaming: false)
                           )
                           .transition(.opacity.combined(with: .scale(scale: 0.95)))
                       }

@@ -50,9 +50,9 @@ struct GlassMessageBubble: View {
     }
     .shadow(
       color: shadowColor,
-      radius: 8,
+      radius: 4,
       x: 0,
-      y: 4
+      y: 2
     )
   }
 
@@ -91,9 +91,9 @@ struct GlassMessageBubble: View {
 
   private var shadowColor: Color {
     if role == .user {
-      return Color.accentColor.opacity(0.3)
+      return Color.accentColor.opacity(0.1)
     } else {
-      return Color.black.opacity(colorScheme == .dark ? 0.5 : 0.15)
+      return Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08)
     }
   }
 }
