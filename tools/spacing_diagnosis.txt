@@ -1,0 +1,120 @@
+================================================================================
+OPENCODE API STREAMING SPACING DIAGNOSIS REPORT
+================================================================================
+Test Date: November 5, 2025
+Test Script: test_opencode_streaming.py
+
+================================================================================
+EXECUTIVE SUMMARY
+================================================================================
+
+✓ SPACES ARE PRESENT IN THE API RESPONSE - The OpenCode API correctly returns
+  text with proper spacing between words.
+
+✗ THE BUG IS NOT IN THE API - This is a CLIENT-SIDE parsing/display issue in Osaurus
+
+================================================================================
+DETAILED FINDINGS
+================================================================================
+
+1. NON-STREAMING TEST RESULTS
+   - Status: SUCCESS (200 OK)
+   - Format: JSON response with 'parts' array
+   - Text Field: 'properties.part.text' contains full response
+   - Spacing: ✓ CORRECT - "Hash Collision" appears with proper spacing
+   - Example text from response:
+     "Hash Collision occurs when two different inputs produce the same hash output."
+
+2. STREAMING TEST RESULTS (SSE via /event endpoint)
+   - Status: SUCCESS (200 OK - connected to SSE stream)
+   - Event Format: Server-Sent Events (SSE)
+   - Event Types: 
+     * "message.updated" - message metadata
+     * "message.part.updated" - incremental text chunks
+     * "session.updated" - session state changes
+   
+   - Chunk Analysis:
+     * DELTA FIELD: Each "message.part.updated" event contains a "delta" field
+     * SPACING: ✓ CONFIRMED - Spaces ARE present in delta chunks
+     
+   - Example chunks received:
+     Chunk 1: "Hash"
+     Chunk 2: " Collision occurs when two different inputs produce the same hash"
+                ^ SPACE IS PRESENT at the beginning of this chunk!
+     Chunk 3: " output. In cryptography, this is a critical"
+                ^ SPACE IS PRESENT
+     Chunk 4: " concern because hash functions are designed to be one-way an"
+                ^ SPACE IS PRESENT
+     
+   - TEXT FIELD: Also contains cumulative text (always has correct spacing)
+
+3. SSE EVENT STRUCTURE
+   Format: Each streaming event has this structure:
+   
+   {
+     "type": "message.part.updated",
+     "properties": {
+       "part": {
+         "id": "prt_...",
+         "sessionID": "ses_...",
+         "messageID": "msg_...",
+         "type": "text",
+         "text": "Hash Collision occurs when...",  ← Cumulative text WITH spaces
+         "time": {...}
+       },
+       "delta": " Collision occurs when..."  ← Incremental chunk WITH space
+     }
+   }
+
+================================================================================
+CONCLUSION
+================================================================================
+
+The OpenCode API is functioning correctly. Both streaming and non-streaming
+endpoints return properly spaced text:
+
+1. Non-streaming: Returns complete text with spaces in JSON 'text' field
+2. Streaming: Returns incremental chunks with spaces in 'delta' field
+
+NEXT STEPS FOR DEBUGGING OSAURUS:
+
+1. Check OpenCodeProxyService.swift line ~450-550 (listenToEvents method)
+   - Verify it's correctly parsing the 'delta' field from SSE events
+   - Look for any string concatenation that might be stripping spaces
+   - Check if there's any .trimmingCharacters() or .filter() removing spaces
+
+2. Check the UI layer (ChatView.swift)
+   - Verify how streaming deltas are appended to the displayed text
+   - Look for any text formatting that might remove spaces
+   - Check AttributedString or Text concatenation logic
+
+3. Specific Issues to Look For:
+   - Are deltas being trimmed before concatenation?
+   - Is there character-by-character processing that skips spaces?
+   - Are markdown parsers stripping spaces?
+   - Is font rendering collapsing whitespace?
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+OpenCode Server Endpoints:
+- GET /config/providers - Provider and model configuration
+- POST /session - Create new chat session
+- POST /session/:id/message - Send message (returns immediately if stream=true)
+- GET /event - SSE endpoint for streaming events (ALL sessions multiplexed here)
+
+Message Request Format:
+{
+  "parts": [{"type": "text", "text": "your message"}],
+  "stream": true,
+  "model": {"providerID": "github-copilot", "modelID": "gpt-4o"}
+}
+
+Expected Osaurus Implementation:
+1. Send POST to /session/:id/message with stream=true
+2. Simultaneously connect to GET /event endpoint for SSE stream
+3. Parse "message.part.updated" events
+4. Extract 'delta' field and append to UI
+5. Continue until receiving completion event or [DONE]
+
