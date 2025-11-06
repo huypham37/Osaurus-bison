@@ -27,6 +27,7 @@ final class ChatSession: ObservableObject {
   @Published var attachments: [Attachment] = []
   private var currentTask: Task<Void, Never>?
   private var currentAttachments: [Attachment] = []
+    
 
   init(initialConversation: [(role: MessageRole, content: String)] = []) {
     // Set initial conversation if provided
@@ -61,25 +62,12 @@ final class ChatSession: ObservableObject {
     }
 
     modelOptions = opts
-    // Set default selectedModel to Claude Sonnet 4.5 if available, otherwise first available
-    selectedModel = opts.first
-    
-    // Check if OpenCode Claude Sonnet 4.5 becomes available
-    Task {
-      do {
-        let models = try await opencode.getAvailableModels()
-        await MainActor.run {
-          // Find Claude Sonnet 4.5 and set as default
-          for (provider, model, _) in models {
-            let modelName = "\(provider):\(model)"
-            if modelName.contains("claude-sonnet-4.5") {
-              self.selectedModel = modelName
-              break
-            }
-          }
-        }
-      } catch {
-      }
+
+    // Set default selectedModel to foundation if available, otherwise first available
+    if FoundationModelService.isDefaultModelAvailable() {
+      selectedModel = "foundation"
+    } else {
+      selectedModel = opts.first
     }
   }
 
@@ -222,6 +210,7 @@ struct ChatView: View {
   @EnvironmentObject var server: ServerController
   @StateObject private var themeManager = ThemeManager.shared
   @StateObject private var conversationStore = ConversationStore.shared
+  @State private var isExpanded = false
 
   private var theme: ThemeProtocol {
     themeManager.currentTheme
@@ -387,7 +376,7 @@ struct ChatView: View {
 //        .allowsHitTesting(false)
         .onAppear {
           // Breathing glow animation - only affects the glass surface shadows
-          withAnimation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+          withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
             testAnimationOpacity = 1.0
             testAnimationScale = 1.05
           }
@@ -432,6 +421,7 @@ struct ChatView: View {
     }
     .frame(height: 60) // Adjust this value to control initial input field height
     .padding(.horizontal, 40)
+    
   }
   
   private func handleMinimalEntrySend() {
