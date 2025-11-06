@@ -1,41 +1,51 @@
 # LLM Rotation Proxy Configuration
 # Priority: Lower numbers = higher priority (tried first)
+#
+# SECURITY: API keys are read from environment variables, not stored here!
+# Set your API keys as environment variables before running the proxy:
+#
+#   export GROK_API_KEY="your-key-here"
+#   export CEREBRAS_API_KEY="your-key-here"
+#   export GEMINI_API_KEY="your-key-here"
+#   export OPENAI_API_KEY="your-key-here"
+#   export MISTRAL_API_KEY="your-key-here"
+#   export TOGETHER_API_KEY="your-key-here"
 
 providers:
   - name: "grok"
     priority: 1
     base_url: "https://api.x.ai/v1"
-    api_key: "YOUR_GROK_API_KEY_HERE"
+    api_key_env: "GROK_API_KEY"
     model: "grok-beta"
 
   - name: "cerebras"
     priority: 2
     base_url: "https://api.cerebras.ai/v1"
-    api_key: "YOUR_CEREBRAS_API_KEY_HERE"
+    api_key_env: "CEREBRAS_API_KEY"
     model: "llama3.1-8b"
 
   - name: "gemini"
     priority: 3
     base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
-    api_key: "YOUR_GEMINI_API_KEY_HERE"
+    api_key_env: "GEMINI_API_KEY"
     model: "gemini-1.5-flash"
 
   - name: "openai"
     priority: 4
     base_url: "https://api.openai.com/v1"
-    api_key: "YOUR_OPENAI_API_KEY_HERE"
+    api_key_env: "OPENAI_API_KEY"
     model: "gpt-3.5-turbo"
 
   - name: "mistral"
     priority: 5
     base_url: "https://api.mistral.ai/v1"
-    api_key: "YOUR_MISTRAL_API_KEY_HERE"
+    api_key_env: "MISTRAL_API_KEY"
     model: "mistral-small-latest"
 
   - name: "together"
     priority: 6
     base_url: "https://api.together.xyz/v1"
-    api_key: "YOUR_TOGETHER_API_KEY_HERE"
+    api_key_env: "TOGETHER_API_KEY"
     model: "meta-llama/Llama-3-8b-chat-hf"
 
 # Notes:
@@ -43,3 +53,4 @@ providers:
 # - Adjust priorities as needed (1 = highest priority)
 # - The proxy will automatically rotate when rate limits are hit
 # - Request counts reset daily for each provider
+# - API keys are NEVER stored in this file for security reasons

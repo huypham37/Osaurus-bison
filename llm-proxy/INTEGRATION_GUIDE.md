@@ -33,26 +33,32 @@ cd llm-proxy
 
 This installs the required Python dependencies (FastAPI, httpx, etc.).
 
-### 2. Configure API Keys
+### 2. Set API Keys (Environment Variables)
 
-Edit `llm-proxy/config.yaml` and add your API keys:
+**For security, API keys are read from environment variables, not stored in config!**
 
-```yaml
-providers:
-  - name: "grok"
-    priority: 1
-    api_key: "xai-abc123..."  # ← Add your key here
-    # ...
+Create a `.env` file:
 
-  - name: "cerebras"
-    priority: 2
-    api_key: "csk-abc123..."  # ← Add your key here
-    # ...
+```bash
+cd llm-proxy
+cp .env.example .env
 ```
 
+Edit `.env` and add your API keys:
+
+```bash
+# .env
+GROK_API_KEY=xai-abc123...
+CEREBRAS_API_KEY=csk-abc123...
+GEMINI_API_KEY=AIza...
+# Add only the ones you have
+```
+
+**Important:** When your Swift app starts the proxy, it needs to pass these environment variables. See `ProxyManager.swift` for how to do this.
+
 You can:
-- Remove providers you don't have keys for
-- Adjust priorities (1 = highest)
+- Add only the providers you have keys for (others are skipped automatically)
+- Adjust priorities in `config.yaml` (1 = highest)
 - Change model names if needed
 
 ### 3. Test the Proxy Manually

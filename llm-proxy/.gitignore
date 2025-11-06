@@ -29,8 +29,10 @@ env/
 *.log
 llm-proxy.log
 
-# Config with API keys (uncomment if you want to keep config.yaml out of git)
-# config.yaml
+# Environment variables with API keys
+.env
+*.env
+!.env.example
 
 # macOS
 .DS_Store

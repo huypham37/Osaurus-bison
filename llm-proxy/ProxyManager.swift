@@ -107,6 +107,31 @@ class ProxyManager {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         process.arguments = [proxyScriptPath]
 
+        // IMPORTANT: Pass environment variables to the Python process
+        // The proxy reads API keys from environment variables
+        var environment = ProcessInfo.processInfo.environment
+
+        // Option 1: Read from .env file (if it exists)
+        if let envPath = Bundle.main.resourcePath?.appending("/llm-proxy/.env"),
+           FileManager.default.fileExists(atPath: envPath),
+           let envContent = try? String(contentsOfFile: envPath) {
+            // Parse .env file
+            for line in envContent.components(separatedBy: .newlines) {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty && !trimmed.hasPrefix("#") {
+                    let parts = trimmed.split(separator: "=", maxSplits: 1)
+                    if parts.count == 2 {
+                        environment[String(parts[0])] = String(parts[1])
+                    }
+                }
+            }
+        }
+
+        // Option 2: Get from system environment (if app was launched with env vars)
+        // This allows users to set env vars before launching the app
+
+        process.environment = environment
+
         // Set up logging (optional)
         let outputPipe = Pipe()
         let errorPipe = Pipe()

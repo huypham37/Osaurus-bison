@@ -30,19 +30,32 @@ cd llm-proxy
 pip3 install -r requirements.txt
 ```
 
-### 2. Configure providers
+### 2. Set API Keys (Environment Variables)
 
-Edit `config.yaml` and add your API keys:
+**For security, API keys are read from environment variables!**
 
-```yaml
-providers:
-  - name: "grok"
-    priority: 1
-    base_url: "https://api.x.ai/v1"
-    api_key: "YOUR_GROK_API_KEY_HERE"
-    model: "grok-beta"
-  # ... add more providers
+Create a `.env` file:
+
+```bash
+cp .env.example .env
 ```
+
+Edit `.env` and add your API keys:
+
+```bash
+GROK_API_KEY=your-actual-key-here
+CEREBRAS_API_KEY=your-actual-key-here
+GEMINI_API_KEY=your-actual-key-here
+# Add only the providers you want to use
+```
+
+Load the environment variables:
+
+```bash
+export $(cat .env | xargs)
+```
+
+Or use a tool like [direnv](https://direnv.net/) for automatic loading.
 
 ### 3. Run the proxy
 
@@ -201,6 +214,25 @@ llm-proxy/
 2. Ensure the provider uses OpenAI-compatible API
 3. Set appropriate priority
 4. Restart or reload the proxy
+
+## Security
+
+**API Key Protection:**
+- ✅ API keys are stored as **environment variables**, never in config files
+- ✅ `.env` files are automatically excluded from git via `.gitignore`
+- ✅ `config.yaml` only contains provider names and URLs, no secrets
+- ✅ Keys are read at runtime using `os.getenv()`
+
+**Network Security:**
+- ✅ Proxy binds to `127.0.0.1` (localhost only)
+- ✅ Not accessible from network or internet
+- ✅ No authentication needed (local-only access)
+
+**Best Practices:**
+1. Never commit `.env` files to version control
+2. Use different API keys for development and production
+3. Rotate keys periodically
+4. Store `.env` file with restricted permissions (chmod 600)
 
 ## License
 

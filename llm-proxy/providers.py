@@ -7,6 +7,7 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -148,14 +149,31 @@ def load_providers_from_config(config: Dict) -> ProviderRegistry:
     providers = []
 
     for provider_config in config.get("providers", []):
+        name = provider_config["name"]
+
+        # Read API key from environment variable
+        api_key_env = provider_config.get("api_key_env")
+        if not api_key_env:
+            logger.warning(f"Skipping provider {name}: no api_key_env specified in config")
+            continue
+
+        api_key = os.getenv(api_key_env)
+        if not api_key:
+            logger.warning(f"Skipping provider {name}: environment variable {api_key_env} not set")
+            continue
+
+        # Create provider with API key from environment
         provider = Provider(
-            name=provider_config["name"],
+            name=name,
             priority=provider_config["priority"],
             base_url=provider_config["base_url"],
-            api_key=provider_config["api_key"],
+            api_key=api_key,
             model=provider_config["model"]
         )
         providers.append(provider)
         logger.info(f"Loaded provider: {provider.name} (priority {provider.priority})")
+
+    if not providers:
+        logger.error("No providers loaded! Make sure to set API key environment variables.")
 
     return ProviderRegistry(providers)

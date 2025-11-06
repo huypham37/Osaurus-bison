@@ -23,17 +23,34 @@ cd llm-proxy
 ./install.sh
 ```
 
-### Step 2: Add Your API Keys
+### Step 2: Set Your API Keys (Environment Variables)
 
-Edit `config.yaml`:
+For security, API keys are stored as environment variables, not in config files!
 
-```yaml
-providers:
-  - name: "grok"
-    priority: 1
-    api_key: "YOUR_GROK_API_KEY_HERE"  # ← Replace this
-    # ...
+**Create a `.env` file:**
+
+```bash
+cp .env.example .env
+nano .env  # or use your favorite editor
 ```
+
+**Add your API keys:**
+
+```bash
+# .env file
+GROK_API_KEY=your-actual-key-here
+CEREBRAS_API_KEY=your-actual-key-here
+GEMINI_API_KEY=your-actual-key-here
+# ... add others as needed
+```
+
+**Load environment variables:**
+
+```bash
+export $(cat .env | xargs)
+```
+
+**Tip:** You don't need all of them! Providers without keys will be automatically skipped.
 
 Get free API keys from:
 - Grok: https://x.ai/api
@@ -42,8 +59,6 @@ Get free API keys from:
 - OpenAI: https://platform.openai.com/api-keys
 - Mistral: https://console.mistral.ai/
 - Together: https://api.together.xyz/
-
-**Tip:** You don't need all of them! Just add the ones you have.
 
 ### Step 3: Test It
 
