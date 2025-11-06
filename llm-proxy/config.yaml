@@ -2,41 +2,43 @@
 # Priority: Lower numbers = higher priority (tried first)
 
 providers:
-  - name: "grok"
+  - name: "groq"
     priority: 1
-    base_url: "https://api.x.ai/v1"
-    api_key: "YOUR_GROK_API_KEY_HERE"
-    model: "grok-beta"
+    base_url: "https://api.groq.com/openai"
+    api_key: "${GROQ_API_KEY}"
+    model: "llama-3.3-70b-versatile"
 
   - name: "cerebras"
     priority: 2
-    base_url: "https://api.cerebras.ai/v1"
-    api_key: "YOUR_CEREBRAS_API_KEY_HERE"
-    model: "llama3.1-8b"
+    base_url: "https://api.cerebras.ai"
+    api_key: "${CEREBRAS_API_KEY}"
+    model: "qwen-3-235b-a22b-instruct-2507"
 
-  - name: "gemini"
-    priority: 3
-    base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
-    api_key: "YOUR_GEMINI_API_KEY_HERE"
-    model: "gemini-1.5-flash"
-
-  - name: "openai"
-    priority: 4
-    base_url: "https://api.openai.com/v1"
-    api_key: "YOUR_OPENAI_API_KEY_HERE"
-    model: "gpt-3.5-turbo"
+  # Gemini uses a different API format (not OpenAI-compatible)
+  # - name: "gemini"
+  #   priority: 2
+  #   base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+  #   api_key: "${GEMINI_API_KEY}"
+  #   model: "gemini-1.5-flash"
 
   - name: "mistral"
-    priority: 5
-    base_url: "https://api.mistral.ai/v1"
-    api_key: "YOUR_MISTRAL_API_KEY_HERE"
+    priority: 3
+    base_url: "https://api.mistral.ai"
+    api_key: "${MISTRAL_API_KEY}"
     model: "mistral-small-latest"
 
-  - name: "together"
-    priority: 6
-    base_url: "https://api.together.xyz/v1"
-    api_key: "YOUR_TOGETHER_API_KEY_HERE"
-    model: "meta-llama/Llama-3-8b-chat-hf"
+  - name: "openrouter"
+    priority: 4
+    base_url: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API}"
+    model: "minimax/minimax-m2:free"
+
+  - name: "deepseek"
+    priority: 5
+    base_url: "https://api.deepseek.com"
+    api_key: "${DEEPSEEK_API}"
+    model: "deepseek-chat"
+    endpoint_override: "/chat/completions"  # DeepSeek uses /chat/completions instead of /v1/chat/completions
 
 # Notes:
 # - Remove or comment out providers you don't want to use

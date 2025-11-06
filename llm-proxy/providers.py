@@ -7,6 +7,8 @@ from typing import List, Dict, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
+import os
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ class Provider:
     base_url: str
     api_key: str
     model: str
+    endpoint_override: Optional[str] = None  # Optional custom endpoint path
 
     # Rate limiting state
     is_rate_limited: bool = False
@@ -143,17 +146,33 @@ class ProviderRegistry:
         }
 
 
+def substitute_env_vars(value: str) -> str:
+    """Substitute environment variables in the format ${VAR_NAME}"""
+    if not isinstance(value, str):
+        return value
+
+    def replacer(match):
+        var_name = match.group(1)
+        return os.environ.get(var_name, match.group(0))
+
+    return re.sub(r'\$\{([^}]+)\}', replacer, value)
+
+
 def load_providers_from_config(config: Dict) -> ProviderRegistry:
     """Load providers from configuration dictionary"""
     providers = []
 
     for provider_config in config.get("providers", []):
+        # Substitute environment variables in api_key
+        api_key = substitute_env_vars(provider_config["api_key"])
+
         provider = Provider(
             name=provider_config["name"],
             priority=provider_config["priority"],
             base_url=provider_config["base_url"],
-            api_key=provider_config["api_key"],
-            model=provider_config["model"]
+            api_key=api_key,
+            model=provider_config["model"],
+            endpoint_override=provider_config.get("endpoint_override")
         )
         providers.append(provider)
         logger.info(f"Loaded provider: {provider.name} (priority {provider.priority})")

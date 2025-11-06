@@ -4,6 +4,7 @@ OpenAI-compatible API proxy with automatic provider rotation
 """
 
 import logging
+import os
 import sys
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -13,8 +14,12 @@ from fastapi.responses import JSONResponse, StreamingResponse
 import httpx
 import yaml
 import uvicorn
+from dotenv import load_dotenv
 
 from providers import load_providers_from_config, ProviderRegistry, Provider
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -69,7 +74,9 @@ async def make_request_to_provider(
     """
     Make a request to a specific provider
     """
-    url = f"{provider.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+    # Use endpoint_override if provided, otherwise use default endpoint
+    final_endpoint = provider.endpoint_override if provider.endpoint_override else endpoint
+    url = f"{provider.base_url.rstrip('/')}/{final_endpoint.lstrip('/')}"
 
     headers = {
         "Authorization": f"Bearer {provider.api_key}",
@@ -183,7 +190,8 @@ async def startup_event():
 
     try:
         # Load config file
-        with open("/home/user/Osaurus-bison/llm-proxy/config.yaml", "r") as f:
+        config_path = os.path.join(os.path.dirname(__file__), "config.yaml")
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
 
         # Initialize provider registry
