@@ -1,0 +1,47 @@
+# LLM Rotation Proxy Configuration
+# Priority: Lower numbers = higher priority (tried first)
+
+providers:
+  - name: "groq"
+    priority: 1
+    base_url: "https://api.groq.com/openai"
+    api_key: "${GROQ_API_KEY}"
+    model: "llama-3.3-70b-versatile"
+
+  - name: "cerebras"
+    priority: 2
+    base_url: "https://api.cerebras.ai"
+    api_key: "${CEREBRAS_API_KEY}"
+    model: "qwen-3-235b-a22b-instruct-2507"
+
+  # Gemini uses a different API format (not OpenAI-compatible)
+  # - name: "gemini"
+  #   priority: 2
+  #   base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+  #   api_key: "${GEMINI_API_KEY}"
+  #   model: "gemini-1.5-flash"
+
+  - name: "mistral"
+    priority: 3
+    base_url: "https://api.mistral.ai"
+    api_key: "${MISTRAL_API_KEY}"
+    model: "mistral-small-latest"
+
+  - name: "openrouter"
+    priority: 4
+    base_url: "https://openrouter.ai/api"
+    api_key: "${OPENROUTER_API}"
+    model: "minimax/minimax-m2:free"
+
+  - name: "deepseek"
+    priority: 5
+    base_url: "https://api.deepseek.com"
+    api_key: "${DEEPSEEK_API}"
+    model: "deepseek-chat"
+    endpoint_override: "/chat/completions"  # DeepSeek uses /chat/completions instead of /v1/chat/completions
+
+# Notes:
+# - Remove or comment out providers you don't want to use
+# - Adjust priorities as needed (1 = highest priority)
+# - The proxy will automatically rotate when rate limits are hit
+# - Request counts reset daily for each provider

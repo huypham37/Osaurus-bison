@@ -1,0 +1,8 @@
+fastapi==0.115.0
+uvicorn==0.31.0
+httpx==0.27.2
+pyyaml==6.0.2
+python-dotenv==1.0.0
+requests==2.31.0
+cerebras-cloud-sdk
+openai>=1.0.0
