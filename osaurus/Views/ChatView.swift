@@ -1191,7 +1191,9 @@ struct GIFImageView: NSViewRepresentable {
     imageView.imageScaling = .scaleProportionallyUpOrDown
     imageView.animates = true
 
-    if let image = NSImage(named: gifName) {
+    // Try to load GIF from Resources folder
+    if let path = Bundle.main.path(forResource: gifName, ofType: "gif"),
+       let image = NSImage(contentsOfFile: path) {
       imageView.image = image
     }
 
