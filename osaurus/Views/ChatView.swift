@@ -1188,8 +1188,10 @@ struct GIFImageView: NSViewRepresentable {
 
   func makeNSView(context: Context) -> NSImageView {
     let imageView = NSImageView()
-    imageView.imageScaling = .scaleProportionallyUpOrDown
+    imageView.imageScaling = .scaleProportionallyDown
+    imageView.imageAlignment = .alignCenter
     imageView.animates = true
+    imageView.frame = NSRect(origin: .zero, size: size)
 
     // Try to load GIF from Resources folder
     if let path = Bundle.main.path(forResource: gifName, ofType: "gif"),
