@@ -616,14 +616,7 @@ struct ChatView: View {
                   ZStack(alignment: .topTrailing) {
                     Group {
                       if turn.content.isEmpty && turn.role == .assistant && session.isStreaming {
-                        HStack(spacing: 6) {
-                          ProgressView()
-                            .scaleEffect(0.7)
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.accentColor))
-                          Text("Thinking…")
-                            .font(Typography.body(width))
-                            .foregroundColor(theme.primaryText)
-                        }
+                        ThinkingAnimationView()
                         .padding(12)
                         .background(
                           GlassMessageBubble(role: .assistant, isStreaming: true)
@@ -1185,6 +1178,35 @@ func findAndStyleScrollViews(in view: NSView?) {
   
   for subview in view.subviews {
     findAndStyleScrollViews(in: subview)
+  }
+}
+
+// MARK: - Thinking Animation
+struct ThinkingAnimationView: View {
+  @State private var animatingDots: [Bool] = [false, false, false]
+  @Environment(\.theme) private var theme
+
+  var body: some View {
+    HStack(spacing: 6) {
+      ForEach(0..<3) { index in
+        Circle()
+          .fill(theme.primaryText.opacity(0.7))
+          .frame(width: 6, height: 6)
+          .scaleEffect(animatingDots[index] ? 1.2 : 0.8)
+          .opacity(animatingDots[index] ? 1.0 : 0.3)
+          .animation(
+            .easeInOut(duration: 0.6)
+              .repeatForever(autoreverses: true)
+              .delay(Double(index) * 0.2),
+            value: animatingDots[index]
+          )
+      }
+    }
+    .onAppear {
+      for index in 0..<3 {
+        animatingDots[index] = true
+      }
+    }
   }
 }
 
