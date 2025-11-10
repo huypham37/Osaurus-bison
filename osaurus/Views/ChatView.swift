@@ -1208,8 +1208,11 @@ struct GIFImageView: NSViewRepresentable {
 // MARK: - Thinking Animation
 struct ThinkingAnimationView: View {
   var body: some View {
-    GIFImageView(gifName: "thinking-animation", size: CGSize(width: 24, height: 24))
-      .frame(width: 24, height: 24)
+    HStack {
+      GIFImageView(gifName: "thinking-animation", size: CGSize(width: 24, height: 24))
+        .frame(width: 24, height: 24)
+    }
+    .frame(minWidth: 60, minHeight: 24)
   }
 }
 
