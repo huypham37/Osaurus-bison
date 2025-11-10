@@ -104,8 +104,6 @@ final class ChatSession: ObservableObject {
     // TODO: Refactor to store multimodal content properly
     var content = trimmed
     if !attachments.isEmpty {
-      for (index, attachment) in attachments.enumerated() {
-      }
       let attachmentInfo = attachments.map { "📎 \($0.fileName)" }.joined(separator: "\n")
       content = content.isEmpty ? attachmentInfo : "\(content)\n\(attachmentInfo)"
     }
@@ -165,8 +163,6 @@ final class ChatSession: ObservableObject {
           let stream: AsyncStream<String>
           if let openCodeService = svc as? OpenCodeProxyService,
              !capturedAttachments.isEmpty {
-            capturedAttachments.enumerated().forEach { index, attachment in
-            }
             stream = try await openCodeService.streamDeltasWithAttachments(
               prompt: prompt,
               parameters: params,
@@ -230,10 +226,6 @@ struct ChatView: View {
   @State private var isExpandingToMainWindow: Bool = false  // Prevent double-expand
   @State private var isSendingMessage: Bool = false  // Prevent double-send from Enter+Button
   
-  // Glow animation states
-  @State private var testAnimationOpacity: Double = 0.3
-  @State private var testAnimationScale: CGFloat = 1.0
-  
   init(
     displayMode: ChatDisplayMode,
     initialConversationId: UUID? = nil
@@ -246,8 +238,6 @@ struct ChatView: View {
        let conversation = ConversationStore.shared.conversations.first(where: { $0.id == conversationId }) {
       initialMessages = conversation.messages
       self._currentConversationId = State(initialValue: conversationId)
-      for (index, msg) in initialMessages.enumerated() {
-      }
     } else {
       initialMessages = []
       self._currentConversationId = State(initialValue: nil)
@@ -369,18 +359,8 @@ struct ChatView: View {
   
   private var minimalEntryView: some View {
     ZStack {
-      // Glass background with animated glow…
+      // Glass background
       GlassSurface(cornerRadius: 40)
-//        .shadow(color: Color.blue.opacity(testAnimationOpacity * 0.6), radius: 20, x: 0, y: 0)
-//        .shadow(color: Color.cyan.opacity(testAnimationOpacity * 0.4), radius: 15, x: 0, y: 0)
-//        .allowsHitTesting(false)
-        .onAppear {
-          // Breathing glow animation - only affects the glass surface shadows
-          withAnimation(.easeInOut(duration: 5.0).repeatForever(autoreverses: true)) {
-            testAnimationOpacity = 1.0
-            testAnimationScale = 1.05
-          }
-        }
       
       HStack(spacing: 12) {
         // Plus icon
@@ -492,7 +472,6 @@ struct ChatView: View {
           if displayMode == .floatingPanel {
             header(containerWidth)
               .padding(.horizontal, 20)
-              .frame(maxWidth: 1000)
               .frame(maxWidth: .infinity)
           }
           
@@ -508,7 +487,6 @@ struct ChatView: View {
             // Input bar at the bottom with integrated send button
             inputBarWithButton(containerWidth)
               .padding(.horizontal, 20)
-              .frame(maxWidth: 1000)
               .frame(maxWidth: .infinity)
           } else {
             emptyState
@@ -519,7 +497,7 @@ struct ChatView: View {
         .padding(.vertical, 20)
         .frame(
           maxWidth: .infinity,
-          maxHeight: session.turns.isEmpty ? .infinity : .infinity,
+          maxHeight: .infinity,
           alignment: .top
         )
       }
@@ -829,7 +807,7 @@ struct ChatView: View {
   
   // Attachment button
   private var attachmentButton: some View {
-    Button(action: { 
+    Button(action: {
       Task {
         do {
           if let attachment = try await AttachmentService.pickImage() {
@@ -854,42 +832,6 @@ struct ChatView: View {
     .buttonStyle(.plain)
     .help("Attach image (.jpg, .png, .webp, max 5MB)")
   }
-
-  private var sendButton: some View {
-    Button(action: { session.sendCurrent() }) {
-      HStack(spacing: 6) {
-        Image(systemName: "paperplane.fill")
-        Text("Send")
-      }
-      .font(.system(size: 14, weight: .medium))
-      .foregroundColor(.white)
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
-      .background(
-        Capsule()
-          .fill(Color.accentColor.opacity(0.9))
-      )
-      .shadow(
-        color: Color.accentColor.opacity(0.3),
-        radius: 8,
-        x: 0,
-        y: 2
-      )
-    }
-    .buttonStyle(.plain)
-    .disabled(
-      session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        || session.isStreaming
-    )
-    .opacity(
-      session.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        || session.isStreaming ? 0.5 : 1
-    )
-    .animation(.easeInOut(duration: theme.animationDurationQuick), value: session.input)
-    .keyboardShortcut(.return, modifiers: [.command])
-  }
-
-
 
   private var emptyState: some View {
     VStack(spacing: 12) {
@@ -1134,17 +1076,14 @@ struct MultilineTextView: NSViewRepresentable {
       let isReturn = (event.keyCode == kVK_Return || event.keyCode == kVK_ANSI_KeypadEnter)
       if isReturn {
         let hasShift = event.modifierFlags.contains(.shift)
-        let hasCommand = event.modifierFlags.contains(.command)
         if hasShift {
           // Insert newline
           self.insertNewline(nil)
           return
         }
-        if hasCommand || !hasCommand {
-          // Command-Return or plain Return: commit
-          commitHandler?()
-          return
-        }
+        // Command-Return or plain Return: commit
+        commitHandler?()
+        return
       }
       super.keyDown(with: event)
     }
