@@ -617,10 +617,7 @@ struct ChatView: View {
                     Group {
                       if turn.content.isEmpty && turn.role == .assistant && session.isStreaming {
                         ThinkingAnimationView()
-                        .padding(12)
-                        .background(
-                          GlassMessageBubble(role: .assistant, isStreaming: true)
-                        )
+                          .padding(.leading, 44)  // Align with other messages (avatar width + spacing)
                       } else {
                         MarkdownMessageView(text: turn.content, baseWidth: width)
                           .font(Typography.body(width))
