@@ -58,7 +58,7 @@ final class ConversationTitleService {
   func autoRenameConversation(
     conversationId: UUID,
     firstUserMessage: String,
-    store: ConversationStore = .shared
+    store: ConversationStore
   ) async {
     guard let generatedTitle = await generateTitle(for: firstUserMessage) else {
       return
