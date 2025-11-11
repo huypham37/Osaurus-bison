@@ -449,15 +449,16 @@ struct ChatView: View {
           return
         }
         isExpandingToMainWindow = true
-        
-        
+
+
         // Save conversation with just the user message (no assistant response yet)
-        let conversationId = conversationStore.createConversation(messages: session.turns)
-        
+        // Use smart title generation for better conversation titles
+        let conversationId = await conversationStore.createConversationWithSmartTitle(messages: session.turns)
+
         // Trigger immediate morph animation to main window
         // Main window will load this conversation and automatically start streaming
         AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
-        
+
         // Reset flags after expansion
         try? await Task.sleep(nanoseconds: 500_000_000)
         isSendingMessage = false
@@ -567,8 +568,10 @@ struct ChatView: View {
           isExpandingToMainWindow = true
 
           // Save conversation and pass ID to AppDelegate before expanding
-          let conversationId = conversationStore.createConversation(messages: session.turns)
-          AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
+          Task { @MainActor in
+            let conversationId = await conversationStore.createConversationWithSmartTitle(messages: session.turns)
+            AppDelegate.shared?.expandPanelToWindow(conversationId: conversationId)
+          }
         }) {
           HStack(spacing: 4) {
             Image(systemName: "arrow.up.left.and.arrow.down.right")
@@ -957,14 +960,16 @@ struct ChatView: View {
   private func saveCurrentConversation() {
     guard displayMode == .mainWindow else { return }
     guard !session.turns.isEmpty else { return }
-    
-    if let id = currentConversationId {
-      // Update existing conversation
-      conversationStore.updateConversation(id, messages: session.turns)
-    } else {
-      // Create new conversation
-      let newId = conversationStore.createConversation(messages: session.turns)
-      currentConversationId = newId
+
+    Task { @MainActor in
+      if let id = currentConversationId {
+        // Update existing conversation with smart title
+        await conversationStore.updateConversationWithSmartTitle(id, messages: session.turns)
+      } else {
+        // Create new conversation with smart title
+        let newId = await conversationStore.createConversationWithSmartTitle(messages: session.turns)
+        currentConversationId = newId
+      }
     }
   }
 }

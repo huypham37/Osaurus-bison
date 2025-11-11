@@ -38,7 +38,8 @@ class ConversationStore: ObservableObject {
   
   // MARK: - CRUD Operations
   
-  /// Create a new conversation
+  /// Create a new conversation with basic title generation (synchronous)
+  /// For smart title generation, use createConversationWithSmartTitle() instead
   func createConversation(title: String = "New Chat", messages: [(role: MessageRole, content: String)] = []) -> UUID {
     var conversation = ConversationItem(title: title, messages: messages)
     if !messages.isEmpty {
@@ -50,13 +51,34 @@ class ConversationStore: ObservableObject {
     saveCurrentConversationId()
     return conversation.id
   }
+
+  /// Create a new conversation with smart AI-generated title
+  func createConversationWithSmartTitle(messages: [(role: MessageRole, content: String)] = []) async -> UUID {
+    let smartTitle = await ConversationItem.generateSmartTitle(from: messages)
+    var conversation = ConversationItem(title: smartTitle, messages: messages)
+    conversations.insert(conversation, at: 0) // Add to top
+    currentConversationId = conversation.id
+    saveConversations()
+    saveCurrentConversationId()
+    return conversation.id
+  }
   
-  /// Update an existing conversation
+  /// Update an existing conversation with basic title generation (synchronous)
   func updateConversation(_ id: UUID, messages: [(role: MessageRole, content: String)]) {
     guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
     conversations[index].messages = messages
     conversations[index].updatedAt = Date()
     conversations[index].generateTitle()
+    saveConversations()
+  }
+
+  /// Update an existing conversation with smart AI-generated title
+  func updateConversationWithSmartTitle(_ id: UUID, messages: [(role: MessageRole, content: String)]) async {
+    guard let index = conversations.firstIndex(where: { $0.id == id }) else { return }
+    let smartTitle = await ConversationItem.generateSmartTitle(from: messages)
+    conversations[index].messages = messages
+    conversations[index].updatedAt = Date()
+    conversations[index].title = smartTitle
     saveConversations()
   }
   
