@@ -255,6 +255,8 @@ struct ChatView: View {
         isPinnedToBottom: $isPinnedToBottom,
         session: session,
         inputIsFocused: inputIsFocused,
+        currentConversationId: currentConversationId,
+        conversationStore: conversationStore,
         onResizeWindow: resizeWindowForContent,
         onSaveConversation: saveCurrentConversation
       ))
@@ -910,6 +912,8 @@ struct ChatViewModifiers: ViewModifier {
   @Binding var isPinnedToBottom: Bool
   @ObservedObject var session: ChatSession
   let inputIsFocused: Bool
+  let currentConversationId: UUID?
+  @ObservedObject var conversationStore: ConversationStore
   let onResizeWindow: (Bool) -> Void
   let onSaveConversation: () -> Void
   
