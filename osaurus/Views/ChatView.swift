@@ -979,8 +979,22 @@ struct ChatViewModifiers: ViewModifier {
   }
   
   private func handleStreamingChange(oldValue: Bool, newValue: Bool) {
+    // Streaming just ended
     if displayMode == .mainWindow && !newValue && oldValue && !session.turns.isEmpty {
       onSaveConversation()
+
+      // Auto-rename after first complete exchange (user + assistant)
+      if session.turns.count == 2,
+         let conversationId = currentConversationId,
+         let firstUserMessage = session.turns.first(where: { $0.role == .user })?.content {
+        Task {
+          await ConversationTitleService.shared.autoRenameConversation(
+            conversationId: conversationId,
+            firstUserMessage: firstUserMessage,
+            store: conversationStore
+          )
+        }
+      }
     }
   }
 }
