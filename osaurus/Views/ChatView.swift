@@ -988,16 +988,17 @@ struct ChatViewModifiers: ViewModifier {
       onSaveConversation()
 
       // Auto-rename after first complete exchange (user + assistant)
-      if session.turns.count == 2,
-         let conversationId = self.currentConversationId,
-         let firstUserMessage = session.turns.first(where: { $0.role == .user })?.content {
-        let store = self.conversationStore
-        Task {
-          await ConversationTitleService.shared.autoRenameConversation(
-            conversationId: conversationId,
-            firstUserMessage: firstUserMessage,
-            store: store
-          )
+      if session.turns.count == 2 {
+        if let conversationId = currentConversationId,
+           let firstUserMessage = session.turns.first(where: { $0.role == .user })?.content {
+          let store = conversationStore
+          Task {
+            await ConversationTitleService.shared.autoRenameConversation(
+              conversationId: conversationId,
+              firstUserMessage: firstUserMessage,
+              store: store
+            )
+          }
         }
       }
     }

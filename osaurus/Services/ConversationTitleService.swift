@@ -39,7 +39,7 @@ final class ConversationTitleService {
       // Clean up the title - remove quotes, trim whitespace, limit length
       let cleanTitle = title
         .trimmingCharacters(in: .whitespacesAndNewlines)
-        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'""''"))
+        .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
         .trimmingCharacters(in: .whitespacesAndNewlines)
 
       // Ensure title isn't too long
