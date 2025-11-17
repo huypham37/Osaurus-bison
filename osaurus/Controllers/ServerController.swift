@@ -102,6 +102,10 @@ final class ServerController: ObservableObject {
       // Ensure any previous instance is shut down
       try await stopServerIfNeeded()
 
+      // Configure shell execution service based on server configuration
+      ShellExecutionService.shared.isEnabled = configuration.enableShellExecution
+      ShellExecutionService.shared.timeoutSeconds = configuration.shellExecutionTimeout
+
       // Create event loop group (allow env-based override to reduce contention)
       let env = ProcessInfo.processInfo.environment
       let nioThreads = Int(env["OSU_NIO_THREADS"] ?? "") ?? configuration.numberOfThreads

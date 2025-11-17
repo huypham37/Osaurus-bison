@@ -101,6 +101,7 @@ osaurus/
 - Multiple response formats: SSE (OpenAI‑style) and NDJSON (Ollama‑style)
 - Compatible with OllamaKit and other Ollama client libraries
 - OpenAI‑compatible function calling with robust parser for model outputs (handles code fences/formatting noise)
+- **Shell execution agent**: Built-in `execute_shell` tool for LLM-driven shell command execution (see [Shell Execution Guide](docs/SHELL_EXECUTION_GUIDE.md))
 - Auto‑detects stop sequences and BOS token from tokenizer configs
 - Health endpoint and simple status UI
 - Real-time system resource monitoring

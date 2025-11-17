@@ -459,32 +459,74 @@ class AsyncHTTPHandler {
           try await sendJSONResponse(res, status: .ok, context: context, extraHeaders: extraHeaders)
           return
         } catch let inv as ServiceToolInvocation {
-          // Map tool invocation to OpenAI-compatible tool_calls and return
-          let tc = ToolCall(
-            id: "call_\(UUID().uuidString.prefix(8))",
-            type: "function",
-            function: ToolCallFunction(name: inv.toolName, arguments: inv.jsonArguments)
-          )
-          let res = ChatCompletionResponse(
-            id: "chatcmpl-\(UUID().uuidString.prefix(8))",
-            created: Int(Date().timeIntervalSince1970),
-            model: effectiveModel,
-            choices: [
-              ChatChoice(
-                index: 0,
-                message: ChatMessage(
-                  role: "assistant", content: nil, tool_calls: [tc], tool_call_id: nil),
-                finish_reason: "tool_calls")
-            ],
-            usage: Usage(
-              prompt_tokens: prompt.count / 4,
-              completion_tokens: 0,
-              total_tokens: prompt.count / 4
-            ),
-            system_fingerprint: nil
-          )
-          try await sendJSONResponse(res, status: .ok, context: context, extraHeaders: extraHeaders)
-          return
+          // Check if this is a built-in tool and agent mode should execute it
+          let isBuiltInTool = BuiltInToolsService.shared.isBuiltInTool(inv.toolName)
+          let shellEnabled = ShellExecutionService.shared.isEnabled
+
+          if isBuiltInTool && shellEnabled {
+            // Agent mode: execute the tool and return the result in the response
+            let executionResult = await BuiltInToolsService.shared.executeTool(
+              name: inv.toolName,
+              arguments: inv.jsonArguments
+            )
+
+            // Format the result as a completion response
+            let resultText: String
+            if executionResult.success {
+              resultText = "Tool '\(inv.toolName)' executed successfully:\n\n\(executionResult.output)"
+            } else {
+              resultText = "Tool '\(inv.toolName)' failed:\n\nError: \(executionResult.error ?? "Unknown error")\n\n\(executionResult.output)"
+            }
+
+            let tokenCount = max(1, resultText.count / 4)
+            let res = ChatCompletionResponse(
+              id: "chatcmpl-\(UUID().uuidString.prefix(8))",
+              created: Int(Date().timeIntervalSince1970),
+              model: effectiveModel,
+              choices: [
+                ChatChoice(
+                  index: 0,
+                  message: ChatMessage(
+                    role: "assistant", content: resultText, tool_calls: nil, tool_call_id: nil),
+                  finish_reason: "stop")
+              ],
+              usage: Usage(
+                prompt_tokens: prompt.count / 4,
+                completion_tokens: tokenCount,
+                total_tokens: prompt.count / 4 + tokenCount
+              ),
+              system_fingerprint: nil
+            )
+            try await sendJSONResponse(res, status: .ok, context: context, extraHeaders: extraHeaders)
+            return
+          } else {
+            // Not a built-in tool or agent mode disabled - return tool call to client
+            let tc = ToolCall(
+              id: "call_\(UUID().uuidString.prefix(8))",
+              type: "function",
+              function: ToolCallFunction(name: inv.toolName, arguments: inv.jsonArguments)
+            )
+            let res = ChatCompletionResponse(
+              id: "chatcmpl-\(UUID().uuidString.prefix(8))",
+              created: Int(Date().timeIntervalSince1970),
+              model: effectiveModel,
+              choices: [
+                ChatChoice(
+                  index: 0,
+                  message: ChatMessage(
+                    role: "assistant", content: nil, tool_calls: [tc], tool_call_id: nil),
+                  finish_reason: "tool_calls")
+              ],
+              usage: Usage(
+                prompt_tokens: prompt.count / 4,
+                completion_tokens: 0,
+                total_tokens: prompt.count / 4
+              ),
+              system_fingerprint: nil
+            )
+            try await sendJSONResponse(res, status: .ok, context: context, extraHeaders: extraHeaders)
+            return
+          }
         }
       }
     }

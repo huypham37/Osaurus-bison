@@ -41,6 +41,12 @@ public struct ServerConfiguration: Codable, Equatable, Sendable {
   /// List of allowed origins for CORS. Empty disables CORS. Use "*" to allow any origin.
   public var allowedOrigins: [String]
 
+  // MARK: - Agent/Shell Execution Settings
+  /// Enable shell command execution from LLM tool calls (default: false for security)
+  public var enableShellExecution: Bool
+  /// Timeout for shell command execution in seconds (default: 30.0)
+  public var shellExecutionTimeout: TimeInterval
+
   private enum CodingKeys: String, CodingKey {
     case port
     case exposeToNetwork
@@ -54,6 +60,8 @@ public struct ServerConfiguration: Codable, Equatable, Sendable {
     case genMaxKVSize
     case genPrefillStepSize
     case allowedOrigins
+    case enableShellExecution
+    case shellExecutionTimeout
   }
 
   public init(from decoder: Decoder) throws {
@@ -81,6 +89,12 @@ public struct ServerConfiguration: Codable, Equatable, Sendable {
     self.allowedOrigins =
       try container.decodeIfPresent([String].self, forKey: .allowedOrigins)
       ?? defaults.allowedOrigins
+    self.enableShellExecution =
+      try container.decodeIfPresent(Bool.self, forKey: .enableShellExecution)
+      ?? defaults.enableShellExecution
+    self.shellExecutionTimeout =
+      try container.decodeIfPresent(TimeInterval.self, forKey: .shellExecutionTimeout)
+      ?? defaults.shellExecutionTimeout
   }
 
   public init(
@@ -95,7 +109,9 @@ public struct ServerConfiguration: Codable, Equatable, Sendable {
     genQuantizedKVStart: Int,
     genMaxKVSize: Int?,
     genPrefillStepSize: Int,
-    allowedOrigins: [String] = []
+    allowedOrigins: [String] = [],
+    enableShellExecution: Bool = false,
+    shellExecutionTimeout: TimeInterval = 30.0
   ) {
     self.port = port
     self.exposeToNetwork = exposeToNetwork
@@ -109,6 +125,8 @@ public struct ServerConfiguration: Codable, Equatable, Sendable {
     self.genMaxKVSize = genMaxKVSize
     self.genPrefillStepSize = genPrefillStepSize
     self.allowedOrigins = allowedOrigins
+    self.enableShellExecution = enableShellExecution
+    self.shellExecutionTimeout = shellExecutionTimeout
   }
 
   /// Default configuration
